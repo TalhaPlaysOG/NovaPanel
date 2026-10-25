@@ -39,7 +39,7 @@ To inspect the installer prior to execution:
 
 ```bash
 # 1. Download installer script
-curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/NovaPanel/main/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/TalhaPlaysOG/NovaPanel/main/install.sh -o install.sh
 
 # 2. Inspect the script content
 less install.sh

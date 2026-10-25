@@ -28,7 +28,7 @@ This document describes how to install **Nova Panel** using both the automated o
 Run the following command as `root` on a fresh server:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/NovaPanel/main/install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/TalhaPlaysOG/NovaPanel/main/install.sh)
 ```
 
 The installer will interactively prompt you for:

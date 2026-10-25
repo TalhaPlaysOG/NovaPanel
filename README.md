@@ -37,9 +37,8 @@ Rather than reinventing or breaking the rock-solid game management architecture 
 Deploy Nova Panel on a clean Ubuntu (20.04, 22.04, 24.04 LTS) or Debian (11, 12) server:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/NovaPanel/main/install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/TalhaPlaysOG/NovaPanel/main/install.sh)
 ```
-*(Replace `YOUR_USERNAME` with your GitHub username after publishing).*
 
 ### Option B: CodeSandbox & Local Dev Mode
 Open this repository in a CodeSandbox Devbox (~8 GiB RAM) or run locally without root permissions:

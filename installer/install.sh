@@ -125,7 +125,7 @@ configure_database
 print_step "Deploying Nova Panel Application Files..."
 mkdir -p "${PANEL_DIR}"
 
-if [[ -d "${SCRIPT_DIR}/../panel" ]]; then
+if [[ -d "${SCRIPT_DIR}/../panel" && -f "${SCRIPT_DIR}/../panel/artisan" ]]; then
     print_info "Syncing from repository panel files..."
     cp -a "${SCRIPT_DIR}/../panel/." "${PANEL_DIR}/"
 else
@@ -133,6 +133,29 @@ else
     curl -sSLo /tmp/panel.tar.gz "https://github.com/pterodactyl/panel/releases/download/v1.15.2/panel.tar.gz" >> "${INSTALL_LOG}" 2>&1 || print_fatal "Failed to download panel release."
     tar -xzf /tmp/panel.tar.gz -C "${PANEL_DIR}/"
     rm -f /tmp/panel.tar.gz
+
+    # Overlay any local or bootstrapped Nova customizations
+    if [[ -d "${SCRIPT_DIR}/../panel" ]]; then
+        cp -a "${SCRIPT_DIR}/../panel/." "${PANEL_DIR}/" 2>/dev/null || true
+    fi
+
+    # Ensure Nova branding files exist if bootstrapped in minimal mode
+    GITHUB_REPO="${NOVA_REPO:-TalhaPlaysOG/NovaPanel}"
+    GITHUB_BRANCH="${NOVA_BRANCH:-main}"
+    RAW_BASE="https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}"
+    if [[ ! -f "${PANEL_DIR}/config/nova.php" ]]; then
+        curl -fsSL --connect-timeout 5 -m 15 -H "User-Agent: NovaInstaller" \
+            "${RAW_BASE}/panel/config/nova.php" -o "${PANEL_DIR}/config/nova.php" 2>/dev/null || true
+    fi
+    mkdir -p "${PANEL_DIR}/public/assets/svgs"
+    if [[ ! -f "${PANEL_DIR}/public/assets/svgs/nova.svg" ]]; then
+        curl -fsSL --connect-timeout 5 -m 15 -H "User-Agent: NovaInstaller" \
+            "${RAW_BASE}/panel/public/assets/svgs/nova.svg" -o "${PANEL_DIR}/public/assets/svgs/nova.svg" 2>/dev/null || true
+    fi
+    if [[ ! -f "${PANEL_DIR}/public/assets/svgs/nova-mark.svg" ]]; then
+        curl -fsSL --connect-timeout 5 -m 15 -H "User-Agent: NovaInstaller" \
+            "${RAW_BASE}/panel/public/assets/svgs/nova-mark.svg" -o "${PANEL_DIR}/public/assets/svgs/nova-mark.svg" 2>/dev/null || true
+    fi
 fi
 
 cd "${PANEL_DIR}" || print_fatal "Could not access ${PANEL_DIR}"
