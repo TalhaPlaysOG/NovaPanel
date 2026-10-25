@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+    <defs>
+        <linearGradient id="mark-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#38bdf8"/>
+            <stop offset="50%" stop-color="#818cf8"/>
+            <stop offset="100%" stop-color="#c084fc"/>
+        </linearGradient>
+    </defs>
+    <!-- Background rounded squircle -->
+    <rect width="100" height="100" rx="24" fill="#0f172a"/>
+    <!-- Outer Orbital Ring -->
+    <circle cx="50" cy="50" r="38" stroke="url(#mark-grad)" stroke-width="2.5" stroke-dasharray="6 4" opacity="0.6"/>
+    <!-- Starburst Core -->
+    <path d="M50 16 L57 43 L84 50 L57 57 L50 84 L43 57 L16 50 L43 43 Z" fill="url(#mark-grad)"/>
+    <!-- Center Flare -->
+    <circle cx="50" cy="50" r="5" fill="#ffffff"/>
+</svg>

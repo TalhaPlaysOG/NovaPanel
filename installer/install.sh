@@ -158,6 +158,17 @@ else
     fi
 fi
 
+# Sync custom images from img/ directory to public web assets
+if [[ -d "${SCRIPT_DIR}/../img" ]]; then
+    print_info "Syncing custom branding images from img/ directory..."
+    mkdir -p "${PANEL_DIR}/public/assets/svgs" "${PANEL_DIR}/public/assets/img"
+    cp -a "${SCRIPT_DIR}/../img/." "${PANEL_DIR}/public/assets/img/" 2>/dev/null || true
+    cp -a "${SCRIPT_DIR}/../img/"*.svg "${PANEL_DIR}/public/assets/svgs/" 2>/dev/null || true
+    if [[ -f "${SCRIPT_DIR}/../img/favicon.ico" ]]; then
+        cp -f "${SCRIPT_DIR}/../img/favicon.ico" "${PANEL_DIR}/public/favicons/favicon.ico" 2>/dev/null || true
+    fi
+fi
+
 cd "${PANEL_DIR}" || print_fatal "Could not access ${PANEL_DIR}"
 
 # Set permissions
