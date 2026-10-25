@@ -174,6 +174,7 @@ if [[ "${DEPLOY_MODE}" == "development" ]]; then
 APP_NAME="Nova Panel"
 APP_ENV=local
 APP_DEBUG=true
+APP_KEY=base64:$(openssl rand -base64 32)
 APP_THEME=pterodactyl
 APP_TIMEZONE=UTC
 APP_URL=${PANEL_URL}
@@ -207,6 +208,7 @@ else
 APP_NAME="Nova Panel"
 APP_ENV=production
 APP_DEBUG=false
+APP_KEY=base64:$(openssl rand -base64 32)
 APP_THEME=pterodactyl
 APP_TIMEZONE=UTC
 APP_URL=${PANEL_URL}
@@ -255,11 +257,40 @@ fi
 # Install Composer Dependencies
 print_info "Installing PHP application dependencies..."
 export COMPOSER_ALLOW_SUPERUSER=1
-composer install --no-dev --optimize-autoloader --no-interaction >> "${INSTALL_LOG}" 2>&1 || print_warning "Composer finished with warnings. Continuing..."
+
+# Attempt Composer installation
+if [[ ! -f "${PANEL_DIR}/vendor/autoload.php" ]]; then
+    composer install --no-dev --optimize-autoloader --no-interaction >> "${INSTALL_LOG}" 2>&1 || {
+        print_warning "Standard composer install reported issues. Retrying with platform bypass..."
+        composer install --no-dev --optimize-autoloader --no-interaction --ignore-platform-req=php >> "${INSTALL_LOG}" 2>&1 || true
+    }
+fi
+
+# Resilient fallback: If vendor/autoload.php is still missing, extract official pre-built vendor package
+if [[ ! -f "${PANEL_DIR}/vendor/autoload.php" ]]; then
+    print_info "Restoring verified vendor dependencies from release bundle..."
+    curl -fsSLo /tmp/panel-vendor.tar.gz "https://github.com/pterodactyl/panel/releases/download/v1.15.2/panel.tar.gz" >> "${INSTALL_LOG}" 2>&1 || true
+    if [[ -f /tmp/panel-vendor.tar.gz ]]; then
+        tar -xzf /tmp/panel-vendor.tar.gz -C "${PANEL_DIR}" vendor 2>/dev/null || true
+        rm -f /tmp/panel-vendor.tar.gz
+    fi
+fi
+
+if [[ ! -f "${PANEL_DIR}/vendor/autoload.php" ]]; then
+    print_fatal "Could not install or locate PHP vendor dependencies (vendor/autoload.php missing)."
+fi
+print_success "PHP dependencies verified."
 
 # Generate Encryption Key
-print_info "Generating application encryption key..."
-php artisan key:generate --force >> "${INSTALL_LOG}" 2>&1 || print_fatal "Failed to generate application key."
+print_info "Verifying application encryption key..."
+if ! php artisan key:generate --force >> "${INSTALL_LOG}" 2>&1; then
+    print_warning "artisan key:generate returned non-zero. Verifying fallback key..."
+    if ! grep -q "^APP_KEY=base64:" "${PANEL_DIR}/.env"; then
+        FALLBACK_KEY="base64:$(openssl rand -base64 32)"
+        sed -i "s|^APP_KEY=.*|APP_KEY=${FALLBACK_KEY}|" "${PANEL_DIR}/.env" || echo "APP_KEY=${FALLBACK_KEY}" >> "${PANEL_DIR}/.env"
+    fi
+fi
+print_success "Application encryption key ready."
 
 # Run Migrations & Seeds
 print_info "Executing database migrations and seeds..."

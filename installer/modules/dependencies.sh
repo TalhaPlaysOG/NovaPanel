@@ -8,20 +8,40 @@ install_system_dependencies() {
 
     if [[ "${DEPLOY_MODE}" == "development" ]]; then
         # Development / CodeSandbox Mode: User-level dependencies
-        print_info "Checking PHP availability..."
+        print_info "Checking PHP availability (PHP >= 8.2 required)..."
+        local need_php_install=0
         if ! command_exists php; then
-            if command_exists sudo && command_exists apt-get; then
-                print_info "Installing PHP via apt..."
-                sudo apt-get update -y >> "${INSTALL_LOG}" 2>&1
-                sudo apt-get install -y php-cli php-mbstring php-xml php-curl php-zip php-sqlite3 php-mysql php-bcmath >> "${INSTALL_LOG}" 2>&1 || true
+            need_php_install=1
+        else
+            if ! php -r 'exit(version_compare(PHP_VERSION, "8.2.0", ">=") ? 0 : 1);'; then
+                print_warning "Installed PHP ($(php -r 'echo PHP_VERSION;')) is below required version 8.2."
+                need_php_install=1
+            fi
+        fi
+
+        if [[ $need_php_install -eq 1 ]]; then
+            if command_exists apt-get; then
+                print_info "Configuring PHP 8.2 repository via apt..."
+                local SUDO_CMD=""
+                if [[ $EUID -ne 0 ]] && command_exists sudo; then SUDO_CMD="sudo"; fi
+                $SUDO_CMD apt-get update -y >> "${INSTALL_LOG}" 2>&1 || true
+                $SUDO_CMD apt-get install -y software-properties-common ca-certificates lsb-release >> "${INSTALL_LOG}" 2>&1 || true
+                if command_exists add-apt-repository; then
+                    $SUDO_CMD add-apt-repository -y ppa:ondrej/php >> "${INSTALL_LOG}" 2>&1 || true
+                fi
+                $SUDO_CMD apt-get update -y >> "${INSTALL_LOG}" 2>&1 || true
+                $SUDO_CMD apt-get install -y php8.2 php8.2-cli php8.2-common php8.2-mbstring php8.2-xml php8.2-curl php8.2-zip php8.2-sqlite3 php8.2-mysql php8.2-bcmath php8.2-intl >> "${INSTALL_LOG}" 2>&1 || true
+                if command_exists update-alternatives && [[ -f /usr/bin/php8.2 ]]; then
+                    $SUDO_CMD update-alternatives --set php /usr/bin/php8.2 >/dev/null 2>&1 || true
+                fi
             elif command_exists nix-env; then
-                print_info "Installing PHP via Nix..."
+                print_info "Installing PHP 8.2 via Nix..."
                 nix-env -iA nixpkgs.php82 >> "${INSTALL_LOG}" 2>&1 || true
             fi
         fi
 
         if ! command_exists php; then
-            print_fatal "PHP is not available in your PATH. Please install PHP 8.1+ in this environment."
+            print_fatal "PHP is not available in your PATH. Please install PHP 8.2+ in this environment."
         fi
 
         PHP_VER=$(php -r 'echo PHP_MAJOR_VERSION . "." . PHP_MINOR_VERSION;')

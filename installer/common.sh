@@ -30,7 +30,7 @@ detect_environment() {
     HAS_ROOT=0
 
     # CodeSandbox / Cloud VM heuristics
-    if [[ -n "${CODESANDBOX_HOST:-}" || -n "${CODESANDBOX_SSE:-}" || -n "${CSB:-}" || -d "/workspace" || -f "/etc/sandbox" ]]; then
+    if [[ -n "${CODESANDBOX_HOST:-}" || -n "${CODESANDBOX_SSE:-}" || -n "${CSB:-}" || -n "${SANDBOX_ID:-}" || -f "/etc/sandbox" ]]; then
         IS_CODESANDBOX=1
     fi
 
