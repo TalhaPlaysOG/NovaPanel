@@ -185,8 +185,12 @@ LOG_CHANNEL=single
 LOG_DEPRECATIONS_CHANNEL=null
 LOG_LEVEL=debug
 
-DB_CONNECTION=sqlite
-DB_DATABASE=${DB_DATABASE}
+DB_CONNECTION=${DB_CONNECTION:-mysql}
+DB_HOST=${DB_HOST:-127.0.0.1}
+DB_PORT=${DB_PORT:-3306}
+DB_DATABASE=${DB_NAME:-novapanel}
+DB_USERNAME=${DB_USER:-novapanel}
+DB_PASSWORD=${DB_PASSWORD:-}
 
 CACHE_DRIVER=file
 QUEUE_CONNECTION=sync
@@ -294,7 +298,12 @@ print_success "Application encryption key ready."
 
 # Run Migrations & Seeds
 print_info "Executing database migrations and seeds..."
-php artisan migrate --seed --force >> "${INSTALL_LOG}" 2>&1 || print_fatal "Failed to migrate database."
+if ! php artisan migrate --seed --force >> "${INSTALL_LOG}" 2>&1; then
+    echo -e "\033[38;5;196m--- Database Migration Error Output ---\033[0m" >&2
+    tail -n 25 "${INSTALL_LOG}" 2>/dev/null || true
+    echo -e "\033[38;5;196m---------------------------------------\033[0m" >&2
+    print_fatal "Failed to migrate database."
+fi
 
 # Create Administrator User
 print_info "Creating administrator user account (${ADMIN_USERNAME})..."
