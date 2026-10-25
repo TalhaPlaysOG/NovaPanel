@@ -1,0 +1,24 @@
+{
+  "$schema": "https://codesandbox.io/schemas/tasks.json",
+  "setupTasks": [
+    {
+      "name": "Install Nova Panel Dependencies",
+      "command": "cd panel && composer install --no-dev --optimize-autoloader"
+    }
+  ],
+  "tasks": {
+    "nova-install": {
+      "name": "Nova Installer (Dev Mode)",
+      "command": "bash install.sh --dev",
+      "runAtStart": true
+    },
+    "nova-serve": {
+      "name": "Nova Panel Web Server",
+      "command": "cd panel && php artisan serve --host=0.0.0.0 --port=8000",
+      "runAtStart": false,
+      "preview": {
+        "port": 8000
+      }
+    }
+  }
+}

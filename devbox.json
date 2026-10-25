@@ -1,0 +1,20 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jetpack-io/devbox/0.13.0/.schema/devbox.schema.json",
+  "packages": [
+    "php82",
+    "php82Packages.composer",
+    "sqlite",
+    "git",
+    "curl"
+  ],
+  "shell": {
+    "init_hook": [
+      "echo 'Welcome to Nova Panel Devbox Environment!'",
+      "export PATH=\"$PWD/installer:$PATH\""
+    ],
+    "scripts": {
+      "install": "bash install.sh --dev",
+      "start": "cd panel && php artisan serve --host=0.0.0.0 --port=8000"
+    }
+  }
+}
