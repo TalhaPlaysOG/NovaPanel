@@ -329,20 +329,17 @@ mkdir -p "${PANEL_DIR}/storage/framework/views" \
 chmod -R 777 "${PANEL_DIR}/storage" "${PANEL_DIR}/bootstrap/cache" 2>/dev/null || true
 rm -f "${PANEL_DIR}/bootstrap/cache/config.php" "${PANEL_DIR}/bootstrap/cache/services.php" 2>/dev/null || true
 
-# Generate Encryption Key
+# Verify Application Encryption Key
 print_info "Verifying application encryption key..."
-if ! php artisan key:generate --force >> "${INSTALL_LOG}" 2>&1; then
-    print_warning "artisan key:generate returned non-zero. Verifying fallback key..."
-    if ! grep -q "^APP_KEY=base64:" "${PANEL_DIR}/.env"; then
-        FALLBACK_KEY="base64:$(openssl rand -base64 32)"
-        sed -i "s|^APP_KEY=.*|APP_KEY=${FALLBACK_KEY}|" "${PANEL_DIR}/.env" || echo "APP_KEY=${FALLBACK_KEY}" >> "${PANEL_DIR}/.env"
-    fi
+if ! grep -q "^APP_KEY=base64:" "${PANEL_DIR}/.env"; then
+    FALLBACK_KEY="base64:$(openssl rand -base64 32)"
+    sed -i "s|^APP_KEY=.*|APP_KEY=${FALLBACK_KEY}|" "${PANEL_DIR}/.env" || echo "APP_KEY=${FALLBACK_KEY}" >> "${PANEL_DIR}/.env"
 fi
 print_success "Application encryption key ready."
 
 # Run Migrations & Seeds
 print_info "Executing database migrations and seeds..."
-if ! php artisan migrate --seed --force >> "${INSTALL_LOG}" 2>&1; then
+if ! php artisan migrate --seed --force --no-interaction >> "${INSTALL_LOG}" 2>&1; then
     echo -e "\033[38;5;196m--- Database Migration Error Output ---\033[0m" >&2
     tail -n 25 "${INSTALL_LOG}" 2>/dev/null || true
     echo -e "\033[38;5;196m---------------------------------------\033[0m" >&2
@@ -357,7 +354,8 @@ php artisan p:user:make \
     --name-first="${ADMIN_FIRST_NAME}" \
     --name-last="${ADMIN_LAST_NAME}" \
     --password="${ADMIN_PASSWORD}" \
-    --admin=1 >> "${INSTALL_LOG}" 2>&1 || print_fatal "Failed to create administrator account."
+    --admin=1 \
+    --no-interaction >> "${INSTALL_LOG}" 2>&1 || print_fatal "Failed to create administrator account."
 
 print_success "Administrator account created successfully."
 
