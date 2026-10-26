@@ -155,6 +155,7 @@ else
     if [[ ! -f "${PANEL_DIR}/public/assets/svgs/nova-mark.svg" ]]; then
         curl -fsSL --connect-timeout 5 -m 15 -H "User-Agent: NovaInstaller" \
             "${RAW_BASE}/panel/public/assets/svgs/nova-mark.svg" -o "${PANEL_DIR}/public/assets/svgs/nova-mark.svg" 2>/dev/null || true
+    fi
 fi
 
 # Ensure pre-compiled web assets & manifest.json are present
