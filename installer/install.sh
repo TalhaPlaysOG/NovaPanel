@@ -346,6 +346,9 @@ if ! php artisan migrate --seed --force --no-interaction >> "${INSTALL_LOG}" 2>&
     print_fatal "Failed to migrate database."
 fi
 
+# Ensure users.external_id is nullable (resolves Doctrine DBAL strict-mode constraint)
+php artisan tinker --execute="try { \Illuminate\Support\Facades\DB::statement('ALTER TABLE users MODIFY external_id VARCHAR(191) NULL DEFAULT NULL'); } catch (\Throwable \$e) {}" >> "${INSTALL_LOG}" 2>&1 || true
+
 # Create Administrator User
 print_info "Creating administrator user account (${ADMIN_USERNAME})..."
 
