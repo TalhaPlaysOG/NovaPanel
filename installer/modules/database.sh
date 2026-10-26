@@ -30,11 +30,31 @@ configure_database() {
         $SUDO_CMD pkill -9 -f mariadb 2>/dev/null || true
         $SUDO_CMD rm -f /run/mysqld/mysqld.sock /run/mysqld/mysqld.sock.lock /run/mysqld/mysqld.pid 2>/dev/null || true
         $SUDO_CMD rm -f /var/run/mysqld/mysqld.sock /var/run/mysqld/mysqld.sock.lock /var/run/mysqld/mysqld.pid 2>/dev/null || true
+        $SUDO_CMD rm -f /var/lib/mysql/*.pid /var/lib/mysql/mysql.sock 2>/dev/null || true
 
         # Ensure required MariaDB runtime directories exist with full read/write permissions
-        $SUDO_CMD mkdir -p /run/mysqld /var/run/mysqld /var/lib/mysql
-        $SUDO_CMD chown -R mysql:mysql /run/mysqld /var/run/mysqld /var/lib/mysql 2>/dev/null || true
-        $SUDO_CMD chmod 777 /run/mysqld /var/run/mysqld 2>/dev/null || true
+        $SUDO_CMD mkdir -p /run/mysqld /var/run/mysqld /var/lib/mysql /var/log/mysql
+        $SUDO_CMD chown -R mysql:mysql /run/mysqld /var/run/mysqld /var/lib/mysql /var/log/mysql 2>/dev/null || true
+        $SUDO_CMD chmod 777 /run/mysqld /var/run/mysqld /var/log/mysql 2>/dev/null || true
+        $SUDO_CMD touch /var/log/mysql/error.log 2>/dev/null || true
+        $SUDO_CMD chown mysql:mysql /var/log/mysql/error.log 2>/dev/null || true
+
+        # Container & cloud virtualization config override (disables native AIO to prevent OS errno 22 crashes)
+        $SUDO_CMD mkdir -p /etc/mysql/mariadb.conf.d /etc/mysql/conf.d 2>/dev/null || true
+        cat << 'EOF' | $SUDO_CMD tee /etc/mysql/mariadb.conf.d/99-novapanel.cnf >/dev/null 2>&1 || true
+[mysqld]
+innodb_use_native_aio = 0
+bind-address = 0.0.0.0
+socket = /run/mysqld/mysqld.sock
+skip-name-resolve
+EOF
+        cat << 'EOF' | $SUDO_CMD tee /etc/mysql/conf.d/99-novapanel.cnf >/dev/null 2>&1 || true
+[mysqld]
+innodb_use_native_aio = 0
+bind-address = 0.0.0.0
+socket = /run/mysqld/mysqld.sock
+skip-name-resolve
+EOF
 
         # Initialize data directory if absent
         if [[ ! -d /var/lib/mysql/mysql ]]; then
@@ -50,26 +70,34 @@ configure_database() {
         fi
 
         if ! mariadb-admin ping --silent 2>/dev/null && ! mysqladmin ping --silent 2>/dev/null; then
-            $SUDO_CMD service mariadb restart >> "${INSTALL_LOG}" 2>&1 || $SUDO_CMD service mysql restart >> "${INSTALL_LOG}" 2>&1 || \
-            $SUDO_CMD /etc/init.d/mariadb restart >> "${INSTALL_LOG}" 2>&1 || $SUDO_CMD /etc/init.d/mysql restart >> "${INSTALL_LOG}" 2>&1 || true
-        fi
-
-        # Standalone daemon fallback for container/cloud dev environments without working sysvinit / systemd
-        sleep 2
-        if ! mariadb-admin ping --silent 2>/dev/null && ! mysqladmin ping --silent 2>/dev/null; then
-            if command_exists mysqld_safe; then
-                $SUDO_CMD mysqld_safe --user=mysql --nowatch >> "${INSTALL_LOG}" 2>&1 || \
-                $SUDO_CMD nohup mysqld_safe --user=mysql >> "${INSTALL_LOG}" 2>&1 &
-            elif command_exists mariadbd-safe; then
-                $SUDO_CMD nohup mariadbd-safe --user=mysql >> "${INSTALL_LOG}" 2>&1 &
-            elif command_exists mysqld; then
-                $SUDO_CMD nohup mysqld --user=mysql >> "${INSTALL_LOG}" 2>&1 &
+            if command_exists service; then
+                $SUDO_CMD service mariadb restart >> "${INSTALL_LOG}" 2>&1 || $SUDO_CMD service mysql restart >> "${INSTALL_LOG}" 2>&1 || true
+            fi
+            if ! mariadb-admin ping --silent 2>/dev/null && ! mysqladmin ping --silent 2>/dev/null; then
+                if [[ -x /etc/init.d/mariadb ]]; then
+                    $SUDO_CMD /etc/init.d/mariadb restart >> "${INSTALL_LOG}" 2>&1 || true
+                elif [[ -x /etc/init.d/mysql ]]; then
+                    $SUDO_CMD /etc/init.d/mysql restart >> "${INSTALL_LOG}" 2>&1 || true
+                fi
             fi
         fi
 
-        # Wait up to 20 seconds for MariaDB socket to become active
+        # Standalone daemon fallback for container/cloud dev environments (Docker, CodeSandbox, Devbox)
+        sleep 2
+        if ! mariadb-admin ping --silent 2>/dev/null && ! mysqladmin ping --silent 2>/dev/null; then
+            print_info "Starting MariaDB in container background mode..."
+            if command_exists mariadbd; then
+                $SUDO_CMD nohup mariadbd --user=mysql --innodb-use-native-aio=0 --skip-name-resolve --log-error=/var/log/mysql/error.log >> "${INSTALL_LOG}" 2>&1 &
+            elif command_exists mysqld; then
+                $SUDO_CMD nohup mysqld --user=mysql --innodb-use-native-aio=0 --skip-name-resolve --log-error=/var/log/mysql/error.log >> "${INSTALL_LOG}" 2>&1 &
+            elif command_exists mysqld_safe; then
+                $SUDO_CMD nohup mysqld_safe --user=mysql --skip-syslog --innodb-use-native-aio=0 --log-error=/var/log/mysql/error.log >> "${INSTALL_LOG}" 2>&1 &
+            fi
+        fi
+
+        # Wait up to 25 seconds for MariaDB socket to become active
         print_info "Waiting for MariaDB server daemon to be ready..."
-        local max_tries=20
+        local max_tries=25
         while [[ $max_tries -gt 0 ]]; do
             # Bridge socket locations between /run/mysqld and /var/run/mysqld
             if [[ -S /run/mysqld/mysqld.sock && ! -e /var/run/mysqld/mysqld.sock ]]; then
@@ -81,6 +109,7 @@ configure_database() {
             if mariadb-admin ping --silent 2>/dev/null || mysqladmin ping --silent 2>/dev/null || \
                mariadb -u root -e "SELECT 1;" >/dev/null 2>&1 || mysql -u root -e "SELECT 1;" >/dev/null 2>&1 || \
                mariadb -h 127.0.0.1 -u root -e "SELECT 1;" >/dev/null 2>&1 || \
+               mysql -h 127.0.0.1 -u root -e "SELECT 1;" >/dev/null 2>&1 || \
                $SUDO_CMD mysql -e "SELECT 1;" >/dev/null 2>&1; then
                 break
             fi
@@ -150,20 +179,23 @@ FLUSH PRIVILEGES;
 
         # Method C: Interactive password prompt if passwordless was explicitly revoked
         if [[ $db_configured -eq 0 ]]; then
-            print_warning "Passwordless root database access was refused."
-            echo -ne " ${CYAN}?${RESET} Enter MySQL/MariaDB root password (leave blank if none): " >&2
-            read -s -r db_root_pw
-            echo "" >&2
+            if mariadb-admin ping --silent 2>/dev/null || mysqladmin ping --silent 2>/dev/null || \
+               nc -z 127.0.0.1 3306 2>/dev/null; then
+                print_warning "Passwordless root database access was refused."
+                echo -ne " ${CYAN}?${RESET} Enter MySQL/MariaDB root password (leave blank if none): " >&2
+                read -s -r db_root_pw
+                echo "" >&2
 
-            if [[ -z "$db_root_pw" ]]; then
-                if mariadb -u root -e "${sql_query}" >> "${INSTALL_LOG}" 2>&1 || \
-                   $SUDO_CMD mysql -e "${sql_query}" >> "${INSTALL_LOG}" 2>&1; then
-                    db_configured=1
-                fi
-            else
-                if mariadb -u root -p"${db_root_pw}" -e "${sql_query}" >> "${INSTALL_LOG}" 2>&1 || \
-                   mysql -u root -p"${db_root_pw}" -e "${sql_query}" >> "${INSTALL_LOG}" 2>&1; then
-                    db_configured=1
+                if [[ -z "$db_root_pw" ]]; then
+                    if mariadb -u root -e "${sql_query}" >> "${INSTALL_LOG}" 2>&1 || \
+                       $SUDO_CMD mysql -e "${sql_query}" >> "${INSTALL_LOG}" 2>&1; then
+                        db_configured=1
+                    fi
+                else
+                    if mariadb -u root -p"${db_root_pw}" -e "${sql_query}" >> "${INSTALL_LOG}" 2>&1 || \
+                       mysql -u root -p"${db_root_pw}" -e "${sql_query}" >> "${INSTALL_LOG}" 2>&1; then
+                        db_configured=1
+                    fi
                 fi
             fi
         fi
@@ -172,7 +204,11 @@ FLUSH PRIVILEGES;
             print_success "Database '${DB_NAME}' and user '${DB_USER}' successfully configured."
         else
             echo -e "\033[38;5;196m--- MariaDB Diagnostic Log ---\033[0m" >&2
-            tail -n 20 "${INSTALL_LOG}" 2>/dev/null || true
+            if [[ -f /var/log/mysql/error.log ]]; then
+                echo -e "\033[38;5;220m[Last error.log lines]:\033[0m" >&2
+                tail -n 15 /var/log/mysql/error.log 2>/dev/null || true
+            fi
+            tail -n 25 "${INSTALL_LOG}" 2>/dev/null || true
             echo -e "\033[38;5;196m-------------------------------\033[0m" >&2
             print_fatal "Could not configure database. Please verify MariaDB service status."
         fi
