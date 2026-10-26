@@ -155,6 +155,15 @@ else
     if [[ ! -f "${PANEL_DIR}/public/assets/svgs/nova-mark.svg" ]]; then
         curl -fsSL --connect-timeout 5 -m 15 -H "User-Agent: NovaInstaller" \
             "${RAW_BASE}/panel/public/assets/svgs/nova-mark.svg" -o "${PANEL_DIR}/public/assets/svgs/nova-mark.svg" 2>/dev/null || true
+fi
+
+# Ensure pre-compiled web assets & manifest.json are present
+if [[ ! -f "${PANEL_DIR}/public/assets/manifest.json" ]]; then
+    print_info "Restoring pre-compiled asset manifest from release package..."
+    curl -fsSLo /tmp/panel-assets.tar.gz "https://github.com/pterodactyl/panel/releases/download/v1.15.2/panel.tar.gz" >> "${INSTALL_LOG}" 2>&1 || true
+    if [[ -f /tmp/panel-assets.tar.gz ]]; then
+        tar -xzf /tmp/panel-assets.tar.gz -C "${PANEL_DIR}/" public/assets 2>/dev/null || true
+        rm -f /tmp/panel-assets.tar.gz
     fi
 fi
 
