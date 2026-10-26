@@ -76,10 +76,15 @@
                 text: '<p>To auto-configure your node run the following command:<br /><small><pre>cd /etc/pterodactyl && sudo wings configure --panel-url {{ config('app.url') }} --token ' + data.token + ' --node ' + data.node + '{{ config('app.debug') ? ' --allow-insecure' : '' }}</pre></small></p>',
                 html: true
             })
-        }).fail(function () {
+        }).fail(function (jqXHR) {
+            console.error('Token generation error:', jqXHR.responseText);
+            var msg = 'Something went wrong creating your token.';
+            if (jqXHR.responseJSON && jqXHR.responseJSON.message) {
+                msg = jqXHR.responseJSON.message;
+            }
             swal({
                 title: 'Error',
-                text: 'Something went wrong creating your token.',
+                text: msg,
                 type: 'error'
             });
         });
