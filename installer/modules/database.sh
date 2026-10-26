@@ -30,30 +30,46 @@ configure_database() {
         $SUDO_CMD pkill -9 -f mariadb 2>/dev/null || true
         $SUDO_CMD rm -f /run/mysqld/mysqld.sock /run/mysqld/mysqld.sock.lock /run/mysqld/mysqld.pid 2>/dev/null || true
         $SUDO_CMD rm -f /var/run/mysqld/mysqld.sock /var/run/mysqld/mysqld.sock.lock /var/run/mysqld/mysqld.pid 2>/dev/null || true
+        $SUDO_CMD rm -f /tmp/mysqld.sock /tmp/mysqld.sock.lock /tmp/mysqld.pid /tmp/mysql.sock 2>/dev/null || true
         $SUDO_CMD rm -f /var/lib/mysql/*.pid /var/lib/mysql/mysql.sock 2>/dev/null || true
 
         # Ensure required MariaDB runtime directories exist with full read/write permissions
-        $SUDO_CMD mkdir -p /run/mysqld /var/run/mysqld /var/lib/mysql /var/log/mysql
+        $SUDO_CMD mkdir -p /run/mysqld /var/run/mysqld /var/lib/mysql /var/log/mysql /tmp
         $SUDO_CMD chown -R mysql:mysql /run/mysqld /var/run/mysqld /var/lib/mysql /var/log/mysql 2>/dev/null || true
         $SUDO_CMD chmod 777 /run/mysqld /var/run/mysqld /var/log/mysql 2>/dev/null || true
+        $SUDO_CMD chmod 1777 /tmp 2>/dev/null || true
         $SUDO_CMD touch /var/log/mysql/error.log 2>/dev/null || true
         $SUDO_CMD chown mysql:mysql /var/log/mysql/error.log 2>/dev/null || true
 
-        # Container & cloud virtualization config override (disables native AIO to prevent OS errno 22 crashes)
+        # Container & cloud virtualization config override (uses /tmp/mysqld.sock to avoid tmpfs container EACCES, disables native AIO)
         $SUDO_CMD mkdir -p /etc/mysql/mariadb.conf.d /etc/mysql/conf.d 2>/dev/null || true
         cat << 'EOF' | $SUDO_CMD tee /etc/mysql/mariadb.conf.d/99-novapanel.cnf >/dev/null 2>&1 || true
 [mysqld]
 innodb_use_native_aio = 0
 bind-address = 0.0.0.0
-socket = /run/mysqld/mysqld.sock
+socket = /tmp/mysqld.sock
+pid-file = /tmp/mysqld.pid
 skip-name-resolve
+
+[client]
+socket = /tmp/mysqld.sock
+
+[client-server]
+socket = /tmp/mysqld.sock
 EOF
         cat << 'EOF' | $SUDO_CMD tee /etc/mysql/conf.d/99-novapanel.cnf >/dev/null 2>&1 || true
 [mysqld]
 innodb_use_native_aio = 0
 bind-address = 0.0.0.0
-socket = /run/mysqld/mysqld.sock
+socket = /tmp/mysqld.sock
+pid-file = /tmp/mysqld.pid
 skip-name-resolve
+
+[client]
+socket = /tmp/mysqld.sock
+
+[client-server]
+socket = /tmp/mysqld.sock
 EOF
 
         # Initialize data directory if absent
@@ -69,11 +85,15 @@ EOF
             $SUDO_CMD systemctl restart mariadb >> "${INSTALL_LOG}" 2>&1 || $SUDO_CMD systemctl restart mysql >> "${INSTALL_LOG}" 2>&1 || true
         fi
 
-        if ! mariadb-admin ping --silent 2>/dev/null && ! mysqladmin ping --silent 2>/dev/null; then
+        if ! mariadb-admin --socket=/tmp/mysqld.sock ping --silent 2>/dev/null && \
+           ! mariadb-admin ping --silent 2>/dev/null && \
+           ! mysqladmin ping --silent 2>/dev/null; then
             if command_exists service; then
                 $SUDO_CMD service mariadb restart >> "${INSTALL_LOG}" 2>&1 || $SUDO_CMD service mysql restart >> "${INSTALL_LOG}" 2>&1 || true
             fi
-            if ! mariadb-admin ping --silent 2>/dev/null && ! mysqladmin ping --silent 2>/dev/null; then
+            if ! mariadb-admin --socket=/tmp/mysqld.sock ping --silent 2>/dev/null && \
+               ! mariadb-admin ping --silent 2>/dev/null && \
+               ! mysqladmin ping --silent 2>/dev/null; then
                 if [[ -x /etc/init.d/mariadb ]]; then
                     $SUDO_CMD /etc/init.d/mariadb restart >> "${INSTALL_LOG}" 2>&1 || true
                 elif [[ -x /etc/init.d/mysql ]]; then
@@ -84,14 +104,16 @@ EOF
 
         # Standalone daemon fallback for container/cloud dev environments (Docker, CodeSandbox, Devbox)
         sleep 2
-        if ! mariadb-admin ping --silent 2>/dev/null && ! mysqladmin ping --silent 2>/dev/null; then
+        if ! mariadb-admin --socket=/tmp/mysqld.sock ping --silent 2>/dev/null && \
+           ! mariadb-admin ping --silent 2>/dev/null && \
+           ! mysqladmin ping --silent 2>/dev/null; then
             print_info "Starting MariaDB in container background mode..."
             if command_exists mariadbd; then
-                $SUDO_CMD nohup mariadbd --user=mysql --innodb-use-native-aio=0 --skip-name-resolve --log-error=/var/log/mysql/error.log >> "${INSTALL_LOG}" 2>&1 &
+                $SUDO_CMD nohup mariadbd --user=mysql --socket=/tmp/mysqld.sock --pid-file=/tmp/mysqld.pid --innodb-use-native-aio=0 --skip-name-resolve --log-error=/var/log/mysql/error.log >> "${INSTALL_LOG}" 2>&1 &
             elif command_exists mysqld; then
-                $SUDO_CMD nohup mysqld --user=mysql --innodb-use-native-aio=0 --skip-name-resolve --log-error=/var/log/mysql/error.log >> "${INSTALL_LOG}" 2>&1 &
+                $SUDO_CMD nohup mysqld --user=mysql --socket=/tmp/mysqld.sock --pid-file=/tmp/mysqld.pid --innodb-use-native-aio=0 --skip-name-resolve --log-error=/var/log/mysql/error.log >> "${INSTALL_LOG}" 2>&1 &
             elif command_exists mysqld_safe; then
-                $SUDO_CMD nohup mysqld_safe --user=mysql --skip-syslog --innodb-use-native-aio=0 --log-error=/var/log/mysql/error.log >> "${INSTALL_LOG}" 2>&1 &
+                $SUDO_CMD nohup mysqld_safe --user=mysql --socket=/tmp/mysqld.sock --pid-file=/tmp/mysqld.pid --skip-syslog --innodb-use-native-aio=0 --log-error=/var/log/mysql/error.log >> "${INSTALL_LOG}" 2>&1 &
             fi
         fi
 
@@ -99,15 +121,22 @@ EOF
         print_info "Waiting for MariaDB server daemon to be ready..."
         local max_tries=25
         while [[ $max_tries -gt 0 ]]; do
-            # Bridge socket locations between /run/mysqld and /var/run/mysqld
-            if [[ -S /run/mysqld/mysqld.sock && ! -e /var/run/mysqld/mysqld.sock ]]; then
+            # Bridge socket locations between /tmp/mysqld.sock, /run/mysqld, and /var/run/mysqld
+            if [[ -S /tmp/mysqld.sock ]]; then
+                $SUDO_CMD ln -sf /tmp/mysqld.sock /run/mysqld/mysqld.sock 2>/dev/null || true
+                $SUDO_CMD ln -sf /tmp/mysqld.sock /var/run/mysqld/mysqld.sock 2>/dev/null || true
+                $SUDO_CMD ln -sf /tmp/mysqld.sock /var/lib/mysql/mysql.sock 2>/dev/null || true
+            elif [[ -S /run/mysqld/mysqld.sock ]]; then
+                $SUDO_CMD ln -sf /run/mysqld/mysqld.sock /tmp/mysqld.sock 2>/dev/null || true
                 $SUDO_CMD ln -sf /run/mysqld/mysqld.sock /var/run/mysqld/mysqld.sock 2>/dev/null || true
-            elif [[ -S /var/run/mysqld/mysqld.sock && ! -e /run/mysqld/mysqld.sock ]]; then
-                $SUDO_CMD ln -sf /var/run/mysqld/mysqld.sock /run/mysqld/mysqld.sock 2>/dev/null || true
             fi
 
-            if mariadb-admin ping --silent 2>/dev/null || mysqladmin ping --silent 2>/dev/null || \
-               mariadb -u root -e "SELECT 1;" >/dev/null 2>&1 || mysql -u root -e "SELECT 1;" >/dev/null 2>&1 || \
+            if mariadb-admin --socket=/tmp/mysqld.sock ping --silent 2>/dev/null || \
+               mariadb-admin ping --silent 2>/dev/null || \
+               mysqladmin ping --silent 2>/dev/null || \
+               mariadb --socket=/tmp/mysqld.sock -u root -e "SELECT 1;" >/dev/null 2>&1 || \
+               mariadb -u root -e "SELECT 1;" >/dev/null 2>&1 || \
+               mysql -u root -e "SELECT 1;" >/dev/null 2>&1 || \
                mariadb -h 127.0.0.1 -u root -e "SELECT 1;" >/dev/null 2>&1 || \
                mysql -h 127.0.0.1 -u root -e "SELECT 1;" >/dev/null 2>&1 || \
                $SUDO_CMD mysql -e "SELECT 1;" >/dev/null 2>&1; then
@@ -154,7 +183,11 @@ FLUSH PRIVILEGES;
 
         # Method B: Direct socket / root authentication
         if [[ $db_configured -eq 0 ]]; then
-            if mariadb -u root -e "${sql_query}" >> "${INSTALL_LOG}" 2>&1; then
+            if mariadb --socket=/tmp/mysqld.sock -u root -e "${sql_query}" >> "${INSTALL_LOG}" 2>&1; then
+                db_configured=1
+            elif mysql --socket=/tmp/mysqld.sock -u root -e "${sql_query}" >> "${INSTALL_LOG}" 2>&1; then
+                db_configured=1
+            elif mariadb -u root -e "${sql_query}" >> "${INSTALL_LOG}" 2>&1; then
                 db_configured=1
             elif mysql -u root -e "${sql_query}" >> "${INSTALL_LOG}" 2>&1; then
                 db_configured=1
