@@ -348,16 +348,72 @@ fi
 
 # Create Administrator User
 print_info "Creating administrator user account (${ADMIN_USERNAME})..."
-php artisan p:user:make \
+
+create_admin_success=0
+
+# Attempt 1: Standard artisan p:user:make
+if php artisan p:user:make \
     --email="${ADMIN_EMAIL}" \
     --username="${ADMIN_USERNAME}" \
     --name-first="${ADMIN_FIRST_NAME}" \
     --name-last="${ADMIN_LAST_NAME}" \
     --password="${ADMIN_PASSWORD}" \
     --admin=1 \
-    --no-interaction >> "${INSTALL_LOG}" 2>&1 || print_fatal "Failed to create administrator account."
+    --no-interaction >> "${INSTALL_LOG}" 2>&1; then
+    create_admin_success=1
+fi
 
-print_success "Administrator account created successfully."
+# Attempt 2: Resilient framework fallback (handles existing users, updates password, sets root_admin)
+if [[ $create_admin_success -eq 0 ]]; then
+    print_info "Resolving user account via application framework..."
+    local_tinker_code="
+\$email = addslashes('${ADMIN_EMAIL}');
+\$username = addslashes('${ADMIN_USERNAME}');
+\$first = addslashes('${ADMIN_FIRST_NAME}');
+\$last = addslashes('${ADMIN_LAST_NAME}');
+\$pw = addslashes('${ADMIN_PASSWORD}');
+
+\$user = \Pterodactyl\Models\User::where('email', \$email)->orWhere('username', \$username)->first();
+if (\$user) {
+    \$user->forceFill([
+        'email' => \$email,
+        'username' => \$username,
+        'name_first' => \$first,
+        'name_last' => \$last,
+        'password' => Illuminate\Support\Facades\Hash::make(\$pw),
+        'root_admin' => true,
+    ])->skipValidation()->save();
+    echo 'ADMIN_READY';
+} else {
+    \$user = new \Pterodactyl\Models\User([
+        'uuid' => Ramsey\Uuid\Uuid::uuid4()->toString(),
+        'email' => \$email,
+        'username' => \$username,
+        'name_first' => \$first,
+        'name_last' => \$last,
+        'password' => Illuminate\Support\Facades\Hash::make(\$pw),
+        'root_admin' => true,
+        'language' => 'en',
+    ]);
+    \$user->skipValidation()->save();
+    echo 'ADMIN_READY';
+}
+"
+    if php artisan tinker --execute="${local_tinker_code}" >> "${INSTALL_LOG}" 2>&1; then
+        if grep -q "ADMIN_READY" "${INSTALL_LOG}"; then
+            create_admin_success=1
+        fi
+    fi
+fi
+
+if [[ $create_admin_success -eq 1 ]]; then
+    print_success "Administrator account verified and ready."
+else
+    echo -e "\033[38;5;196m--- User Creation Error Output ---\033[0m" >&2
+    tail -n 25 "${INSTALL_LOG}" 2>/dev/null || true
+    echo -e "\033[38;5;196m----------------------------------\033[0m" >&2
+    print_fatal "Failed to create administrator account."
+fi
 
 # Setup Queue Worker
 if [[ "${DEPLOY_MODE}" == "production" ]]; then
