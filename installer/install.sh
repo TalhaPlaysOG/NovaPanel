@@ -171,11 +171,23 @@ fi
 
 cd "${PANEL_DIR}" || print_fatal "Could not access ${PANEL_DIR}"
 
+# Ensure required Laravel framework storage directories exist with full read/write permissions
+mkdir -p "${PANEL_DIR}/storage/framework/views" \
+         "${PANEL_DIR}/storage/framework/cache/data" \
+         "${PANEL_DIR}/storage/framework/sessions" \
+         "${PANEL_DIR}/storage/logs" \
+         "${PANEL_DIR}/storage/app/public" \
+         "${PANEL_DIR}/bootstrap/cache"
+
+# Clean any stale compiled bootstrap/cache files
+rm -f "${PANEL_DIR}/storage/framework/views/"*.php 2>/dev/null || true
+rm -f "${PANEL_DIR}/bootstrap/cache/"*.php 2>/dev/null || true
+
 # Set permissions
 if [[ "${DEPLOY_MODE}" == "production" ]]; then
     chown -R www-data:www-data "${PANEL_DIR}" 2>/dev/null || true
 fi
-chmod -R 755 "${PANEL_DIR}/storage" "${PANEL_DIR}/bootstrap/cache" 2>/dev/null || true
+chmod -R 777 "${PANEL_DIR}/storage" "${PANEL_DIR}/bootstrap/cache" 2>/dev/null || true
 
 # Generate .env
 print_info "Generating application configuration (.env)..."
@@ -202,6 +214,8 @@ DB_PORT=${DB_PORT:-3306}
 DB_DATABASE=${DB_DATABASE:-${DB_NAME:-novapanel}}
 DB_USERNAME=${DB_USER:-novapanel}
 DB_PASSWORD=${DB_PASSWORD:-}
+
+VIEW_COMPILED_PATH=${PANEL_DIR}/storage/framework/views
 
 CACHE_DRIVER=file
 QUEUE_CONNECTION=sync
@@ -241,6 +255,8 @@ DB_DATABASE=${DB_NAME}
 DB_USERNAME=${DB_USER}
 DB_PASSWORD=${DB_PASSWORD}
 
+VIEW_COMPILED_PATH=${PANEL_DIR}/storage/framework/views
+
 REDIS_HOST=127.0.0.1
 REDIS_PASSWORD=null
 REDIS_PORT=6379
@@ -273,6 +289,14 @@ fi
 print_info "Installing PHP application dependencies..."
 export COMPOSER_ALLOW_SUPERUSER=1
 
+# Ensure cache directories exist before composer hooks
+mkdir -p "${PANEL_DIR}/storage/framework/views" \
+         "${PANEL_DIR}/storage/framework/cache/data" \
+         "${PANEL_DIR}/storage/framework/sessions" \
+         "${PANEL_DIR}/storage/logs" \
+         "${PANEL_DIR}/bootstrap/cache"
+chmod -R 777 "${PANEL_DIR}/storage" "${PANEL_DIR}/bootstrap/cache" 2>/dev/null || true
+
 # Attempt Composer installation
 if [[ ! -f "${PANEL_DIR}/vendor/autoload.php" ]]; then
     composer install --no-dev --optimize-autoloader --no-interaction >> "${INSTALL_LOG}" 2>&1 || {
@@ -295,6 +319,15 @@ if [[ ! -f "${PANEL_DIR}/vendor/autoload.php" ]]; then
     print_fatal "Could not install or locate PHP vendor dependencies (vendor/autoload.php missing)."
 fi
 print_success "PHP dependencies verified."
+
+# Ensure runtime framework cache directories are intact before artisan commands
+mkdir -p "${PANEL_DIR}/storage/framework/views" \
+         "${PANEL_DIR}/storage/framework/cache/data" \
+         "${PANEL_DIR}/storage/framework/sessions" \
+         "${PANEL_DIR}/storage/logs" \
+         "${PANEL_DIR}/bootstrap/cache"
+chmod -R 777 "${PANEL_DIR}/storage" "${PANEL_DIR}/bootstrap/cache" 2>/dev/null || true
+rm -f "${PANEL_DIR}/bootstrap/cache/config.php" "${PANEL_DIR}/bootstrap/cache/services.php" 2>/dev/null || true
 
 # Generate Encryption Key
 print_info "Verifying application encryption key..."
