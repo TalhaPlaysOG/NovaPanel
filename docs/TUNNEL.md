@@ -40,6 +40,36 @@ For persistent, professional domain-based access without opening incoming firewa
 1. A domain name added to a free Cloudflare account.
 2. Access to **Cloudflare Zero Trust Dashboard** (`https://one.dash.cloudflare.com`).
 
+### Fast setup with the menu (recommended)
+
+```bash
+sudo nova menu --tunnel
+```
+
+The menu performs Cloudflare's official APT installation:
+
+```bash
+sudo mkdir -p --mode=0755 /usr/share/keyrings
+curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg \
+  | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
+
+echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main' \
+  | sudo tee /etc/apt/sources.list.d/cloudflared.list
+
+sudo apt-get update && sudo apt-get install -y cloudflared
+```
+
+It then prompts:
+
+```
+? Paste your Cloudflare Tunnel Token (input hidden):
+```
+
+Paste the token from step 3 below. The service is installed, enabled and
+started automatically (`systemctl status cloudflared`). If you already created
+the public hostname, the menu can also set `APP_URL` and `TRUSTED_PROXIES` for
+you.
+
 ### Setup Steps:
 1. Navigate to **Networks** -> **Tunnels** -> **Create a Tunnel**.
 2. Select **Cloudflared** and name your tunnel (e.g. `nova-panel`).
@@ -74,3 +104,4 @@ Nova Panel includes dedicated tunnel management commands:
 2. **CSRF Protection**: Laravel CSRF token verification remains active.
 3. **Encrypted Egress**: The `cloudflared` client communicates over outbound TLS (port 7844 / 443) to Cloudflare's global edge network. No inbound router ports need to be forwarded.
 4. **Credential Protection**: Tunnel tokens are stored with restricted `600` permissions in `/etc/nova-panel/tunnel.env`.
+5. **No insecure-form warning**: Because Cloudflare terminates TLS at its edge, the panel is served to the browser over `https://`, so browsers no longer show the "information you're about to submit is not secure" interstitial. If the panel is exposed over plain HTTP, `panel/public/js/secure-forms.js` submits admin forms with `fetch()` so the warning does not interrupt normal operation.

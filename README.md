@@ -50,6 +50,24 @@ bash install.sh --dev
 - Binds to `0.0.0.0:8000` with automated CodeSandbox HTTPS port preview.
 - Enables panel-only testing for accounts, UI, egg management, and APIs without requiring systemd or kernel cgroups. See [`docs/CODESANDBOX.md`](docs/CODESANDBOX.md).
 
+### Option C: Interactive Setup Menu (Buttons)
+Prefer a menu over long commands? Launch the button-driven setup screen:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/TalhaPlaysOG/NovaPanel/main/installer/nova-menu.sh)
+```
+
+| Button | What it does |
+| :--- | :--- |
+| `[1] Install Panel` | Runs the full automated panel installation |
+| `[2] Install Wings` | Installs Docker + Wings on this machine |
+| `[3] Setup Tunnel` | Installs `cloudflared` via APT and asks for your tunnel token |
+| `[4] Auto Node` | Asks for an IP, creates the node, seeds ports and brings Wings online |
+| `[5] Create User` | Creates a panel account (optionally a root administrator) |
+| `[6] Status` | Shows services, nodes and access configuration |
+
+After installation the same menu is available as `sudo nova menu`. See [`docs/MENU.md`](docs/MENU.md) for details.
+
 ---
 
 ## Key Features
@@ -59,6 +77,8 @@ bash install.sh --dev
 - **Zero-Config Game Port Seeding**: Automatically provisions default server allocations (`25565-25575`) so you can deploy Minecraft servers immediately.
 - **Configurable Branding**: Custom Nova Panel aesthetic with dark mode, modern SVG branding, and configurable branding tokens in `panel/config/nova.php`.
 - **100% API & Egg Compatible**: Works out-of-the-box with all community eggs, Docker images, and third-party API integrations (Application API & Client API preserved).
+- **Button-Driven Setup Menu**: A single interactive screen for installing the panel or Wings, wiring a Cloudflare tunnel with your token, auto-registering a node from an IP, and creating users (`sudo nova menu`).
+- **No Insecure-Form Warning**: Admin forms are submitted through a fetch-based handler, so Chromium no longer interrupts every action with the "information you're about to submit is not secure" interstitial when the panel runs on plain HTTP.
 
 ---
 
@@ -92,6 +112,9 @@ Select how you want to access your panel:
 Nova Panel includes a system-wide management command installed to `/usr/local/bin/nova`:
 
 ```bash
+# Open the interactive setup menu (install panel/wings, tunnel, node, user)
+sudo nova menu
+
 # Check status of web server, database, Redis, Wings, and tunnels
 sudo nova status
 
@@ -125,11 +148,13 @@ NovaPanel/
 │   └── resources/              # Views, React scripts, and themes
 ├── installer/                  # Modular installer and maintenance scripts
 │   ├── install.sh              # Master installer orchestrator
+│   ├── nova-menu.sh            # Interactive setup menu (install panel/wings, tunnel, node, user)
 │   ├── update.sh               # Safe update workflow
 │   ├── backup.sh               # Automated backup generator
 │   ├── restore.sh              # Snapshot restoration utility
 │   ├── repair.sh               # Diagnostics & permission fixer
 │   ├── nova-cli.sh             # System CLI (/usr/local/bin/nova)
+│   ├── helpers/                # PHP helpers used by the menu (auto node, user creation)
 │   ├── common.sh               # UI helpers, colors, logging, and prompts
 │   └── modules/                # Specialized installation modules
 │       ├── system-checks.sh    # Hardware and OS validation
@@ -140,8 +165,10 @@ NovaPanel/
 │       ├── wings.sh            # Official Wings daemon binary & systemd
 │       ├── node-registration.sh# Automated node & allocation registration
 │       └── access/             # IP, Domain, and Tunnel access modules
+│   └── helpers/                # Auto node & create user PHP helpers
 ├── docs/                       # Comprehensive documentation
 │   ├── INSTALL.md
+│   ├── MENU.md                 # Interactive setup menu & browser warning fix
 │   ├── UPDATE.md
 │   ├── BACKUP.md
 │   ├── RESTORE.md
@@ -163,6 +190,7 @@ NovaPanel/
 
 Detailed technical documentation is available in the [`docs/`](docs/) directory:
 - [Installation Guide](docs/INSTALL.md)
+- [Interactive Setup Menu](docs/MENU.md)
 - [Update Strategy & Rollback](docs/UPDATE.md)
 - [Backup Automation](docs/BACKUP.md)
 - [Restoration Procedures](docs/RESTORE.md)

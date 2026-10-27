@@ -374,6 +374,25 @@ cmd_install() {
     fi
 }
 
+# Command: Interactive menu (buttons)
+cmd_menu() {
+    local menu_script=""
+    if [[ -f "${INSTALLER_DIR}/nova-menu.sh" ]]; then
+        menu_script="${INSTALLER_DIR}/nova-menu.sh"
+    elif [[ -f "${INSTALLER_DIR}/installer/nova-menu.sh" ]]; then
+        menu_script="${INSTALLER_DIR}/installer/nova-menu.sh"
+    elif [[ -f "./installer/nova-menu.sh" ]]; then
+        menu_script="./installer/nova-menu.sh"
+    fi
+
+    if [[ -z "$menu_script" ]]; then
+        echo -e "${RED}Menu script not found.${RESET}"
+        exit 1
+    fi
+
+    exec bash "$menu_script" "$@"
+}
+
 # Command: Start / Stop (Development Mode)
 cmd_start() {
     print_header
@@ -416,6 +435,7 @@ usage() {
     echo -e "${BOLD}Usage:${RESET} nova <command> [arguments]\n"
     echo -e "${BOLD}Available Commands:${RESET}"
     echo -e "  ${CYAN}nova status${RESET}          Show operational status of services and access modes"
+    echo -e "  ${CYAN}nova menu${RESET}            Open the interactive menu (install panel/wings, tunnel, node, user)"
     echo -e "  ${CYAN}nova install${RESET}         Execute or reconfigure Nova Panel installation"
     echo -e "  ${CYAN}nova update${RESET}          Safely update Nova Panel, migrations, and Wings"
     echo -e "  ${CYAN}nova backup${RESET}          Create a full snapshot (database, .env, SSL, configs)"
@@ -432,6 +452,10 @@ usage() {
 case "${1:-}" in
     status)
         cmd_status
+        ;;
+    menu)
+        shift
+        cmd_menu "$@"
         ;;
     install)
         shift

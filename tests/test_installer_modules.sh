@@ -51,6 +51,7 @@ for script in \
     "${INSTALLER_DIR}/update.sh" \
     "${INSTALLER_DIR}/repair.sh" \
     "${INSTALLER_DIR}/nova-cli.sh" \
+    "${INSTALLER_DIR}/nova-menu.sh" \
     "${INSTALLER_DIR}/modules/system-checks.sh" \
     "${INSTALLER_DIR}/modules/dependencies.sh" \
     "${INSTALLER_DIR}/modules/database.sh" \
@@ -95,7 +96,28 @@ assert_equal "Generate 32-char token length" "32" "${#token_32}"
 token_64=$(generate_random_token 64)
 assert_equal "Generate 64-char token length" "64" "${#token_64}"
 
-# 5. Summary
+# 5. Menu Helper Integrity
+echo -e "\n\033[38;5;45m[Test 5] Setup Menu & Helper Integrity\033[0m"
+
+assert_true "nova-menu.sh exists" '[[ -f "${INSTALLER_DIR}/nova-menu.sh" ]]'
+assert_true "auto-node helper exists" '[[ -f "${INSTALLER_DIR}/helpers/auto-node.php" ]]'
+assert_true "create-user helper exists" '[[ -f "${INSTALLER_DIR}/helpers/create-user.php" ]]'
+assert_true "Menu installs cloudflared via APT" 'grep -q "install_cloudflared_apt" "${INSTALLER_DIR}/nova-menu.sh"'
+assert_true "Tunnel module configures the Cloudflare APT repo" 'grep -q "https://pkg.cloudflare.com/cloudflared any main" "${INSTALLER_DIR}/modules/access/tunnel.sh"'
+
+if command -v php >/dev/null 2>&1; then
+    for helper in "${INSTALLER_DIR}/helpers/auto-node.php" "${INSTALLER_DIR}/helpers/create-user.php"; do
+        if php -l "$helper" >/dev/null 2>&1; then
+            assert_equal "PHP syntax: $(basename "$helper")" "0" "0"
+        else
+            assert_equal "PHP syntax: $(basename "$helper")" "0" "1"
+        fi
+    done
+else
+    echo -e "  \033[38;5;244m- PHP not available, skipping helper lint\033[0m"
+fi
+
+# 6. Summary
 echo -e "\n------------------------------------------------------------"
 echo -e "Modules Test Summary: Passed: \033[38;5;48m${PASSED}\033[0m | Failed: \033[38;5;196m${FAILED}\033[0m"
 if [[ $FAILED -gt 0 ]]; then

@@ -16,6 +16,50 @@ install_cloudflared_binary() {
     print_success "cloudflared binary ready: $(cloudflared --version | head -n 1)"
 }
 
+# Install cloudflared from Cloudflare's official APT repository (recommended).
+install_cloudflared_apt() {
+    if command_exists cloudflared; then
+        print_info "cloudflared is already installed: $(cloudflared --version 2>/dev/null | head -n 1)"
+        return 0
+    fi
+
+    if ! command_exists apt-get; then
+        print_warning "APT was not found. Falling back to the official cloudflared binary download."
+        install_cloudflared_binary
+        return $?
+    fi
+
+    export DEBIAN_FRONTEND=noninteractive
+
+    print_info "Adding the Cloudflare APT repository..."
+    mkdir -p --mode=0755 /usr/share/keyrings
+
+    if ! curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg \
+        | tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null; then
+        print_error "Could not download the Cloudflare GPG key."
+        return 1
+    fi
+
+    echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main' \
+        | tee /etc/apt/sources.list.d/cloudflared.list >/dev/null
+
+    print_info "Refreshing package lists and installing cloudflared..."
+    apt-get update >> "${INSTALL_LOG}" 2>&1 || print_warning "apt-get update reported an issue. Continuing anyway."
+
+    if ! apt-get install -y cloudflared >> "${INSTALL_LOG}" 2>&1; then
+        print_error "Failed to install cloudflared from APT."
+        print_info "Check the log at ${INSTALL_LOG}"
+        return 1
+    fi
+
+    if ! command_exists cloudflared; then
+        print_error "cloudflared is still not available on PATH."
+        return 1
+    fi
+
+    print_success "cloudflared installed: $(cloudflared --version 2>/dev/null | head -n 1)"
+}
+
 configure_tunnel_access() {
     print_step "Configuring Access Mode: Secure Tunnel Access"
 
@@ -33,7 +77,7 @@ configure_tunnel_access() {
         tunnel_choice=$(prompt_input "Select tunnel type [1 or 2]" "1")
     done
 
-    install_cloudflared_binary
+    install_cloudflared_apt || return 1
 
     if [[ "$tunnel_choice" == "1" ]]; then
         configure_temporary_tunnel
@@ -148,7 +192,7 @@ EOF
 
     # Install cloudflared service with token
     print_info "Installing cloudflared service..."
-    /usr/local/bin/cloudflared service install "${cf_token}" >> "${INSTALL_LOG}" 2>&1 || {
+    if ! /usr/local/bin/cloudflared service install "${cf_token}" >> "${INSTALL_LOG}" 2>&1; then
         # Fallback manual systemd service if cloudflared service install fails
         cat > /etc/systemd/system/cloudflared.service << EOF
 [Unit]
@@ -166,7 +210,7 @@ RestartSec=5s
 WantedBy=multi-user.target
 EOF
         systemctl daemon-reload >> "${INSTALL_LOG}" 2>&1
-    }
+    fi
 
     systemctl enable cloudflared >> "${INSTALL_LOG}" 2>&1
     systemctl restart cloudflared >> "${INSTALL_LOG}" 2>&1

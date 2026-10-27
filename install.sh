@@ -15,9 +15,17 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || echo "")"
 
+# Launch the interactive setup menu instead of the linear installer
+LAUNCH_SCRIPT="installer/install.sh"
+for arg in "$@"; do
+    case "$arg" in
+        --menu) LAUNCH_SCRIPT="installer/nova-menu.sh" ;;
+    esac
+done
+
 # If running directly from a cloned local repository
-if [[ -n "${SCRIPT_DIR}" && -f "${SCRIPT_DIR}/installer/install.sh" ]]; then
-    exec bash "${SCRIPT_DIR}/installer/install.sh" "$@"
+if [[ -n "${SCRIPT_DIR}" && -f "${SCRIPT_DIR}/${LAUNCH_SCRIPT}" ]]; then
+    exec bash "${SCRIPT_DIR}/${LAUNCH_SCRIPT}" "$@"
 fi
 
 # If running via remote pipe: curl -fsSL ... | bash
@@ -80,6 +88,9 @@ if [[ "${DOWNLOAD_SUCCESS}" != "true" ]]; then
     
     BOOTSTRAP_FILES=(
         "installer/install.sh"
+        "installer/nova-menu.sh"
+        "installer/helpers/auto-node.php"
+        "installer/helpers/create-user.php"
         "installer/common.sh"
         "installer/backup.sh"
         "installer/restore.sh"
@@ -112,9 +123,9 @@ if [[ "${DOWNLOAD_SUCCESS}" != "true" ]]; then
     fi
 fi
 
-if [[ "${DOWNLOAD_SUCCESS}" == "true" && -f "${TMP_DIR}/installer/install.sh" ]]; then
+if [[ "${DOWNLOAD_SUCCESS}" == "true" && -f "${TMP_DIR}/${LAUNCH_SCRIPT}" ]]; then
     chmod +x "${TMP_DIR}/installer/"*.sh "${TMP_DIR}/installer/modules/"*.sh "${TMP_DIR}/installer/modules/access/"*.sh 2>/dev/null || true
-    exec bash "${TMP_DIR}/installer/install.sh" "$@"
+    exec bash "${TMP_DIR}/${LAUNCH_SCRIPT}" "$@"
 else
     echo -e "\033[38;5;196mError:\033[0m Unable to download Nova Panel installer bundle from https://github.com/${GITHUB_REPO}." >&2
     echo -e "Please ensure the repository is public and accessible, or clone it manually:" >&2

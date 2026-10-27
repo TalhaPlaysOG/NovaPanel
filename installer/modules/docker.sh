@@ -26,15 +26,27 @@ install_docker_engine() {
         print_info "Setting up Docker official repository..."
         install -m 0755 -d /etc/apt/keyrings
 
+        if ! command_exists gpg; then
+            apt-get install -y gnupg ca-certificates >> "${INSTALL_LOG}" 2>&1 || true
+        fi
+
         local keyring="/etc/apt/keyrings/docker.gpg"
         if [[ ! -f "$keyring" ]]; then
             curl -fsSL "https://download.docker.com/linux/${OS_ID}/gpg" | gpg --dearmor -o "$keyring" >> "${INSTALL_LOG}" 2>&1 || print_fatal "Failed to download Docker GPG key."
             chmod a+r "$keyring"
         fi
 
+        local os_codename
+        os_codename=$(lsb_release -cs 2>/dev/null || true)
+        if [[ -z "$os_codename" && -f /etc/os-release ]]; then
+            # shellcheck disable=SC1091
+            os_codename=$(. /etc/os-release && echo "${VERSION_CODENAME:-stable}")
+        fi
+        [[ -z "$os_codename" ]] && os_codename="stable"
+
         echo \
           "deb [arch=$(dpkg --print-architecture) signed-by=${keyring}] https://download.docker.com/linux/${OS_ID} \
-          $(lsb_release -cs) stable" > /etc/apt/sources.list.d/docker.list
+          ${os_codename} stable" > /etc/apt/sources.list.d/docker.list
 
         apt-get update -y >> "${INSTALL_LOG}" 2>&1
 

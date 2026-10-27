@@ -175,6 +175,7 @@
             {!! Theme::js('vendor/select2/select2.full.min.js?t={cache-version}') !!}
             {!! Theme::js('js/admin/functions.js?t={cache-version}') !!}
             <script src="/js/autocomplete.js" type="application/javascript"></script>
+            <script src="/js/secure-forms.js" type="application/javascript"></script>
 
             @if(Auth::user()->root_admin)
                 <script>

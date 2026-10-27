@@ -56,6 +56,36 @@ The installer will interactively prompt you for:
 
 ---
 
+## Method 1b: Interactive Setup Menu (Buttons)
+
+If you prefer selecting actions from a menu instead of running individual
+commands, use the setup menu:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/TalhaPlaysOG/NovaPanel/main/installer/nova-menu.sh)
+```
+
+Or, from a cloned repository / an installed panel:
+
+```bash
+sudo bash installer/nova-menu.sh
+sudo nova menu
+```
+
+| Button | Action |
+| :--- | :--- |
+| `[1] Install Panel` | Complete panel installation (same workflow as Method 1) |
+| `[2] Install Wings` | Docker Engine + Wings daemon |
+| `[3] Setup Tunnel` | Adds the Cloudflare APT repository, installs `cloudflared`, then asks you to paste your tunnel token |
+| `[4] Auto Node` | Asks for the node IP, registers the node, seeds ports and starts Wings so it comes online |
+| `[5] Create User` | Creates a panel account (optionally a root administrator) |
+| `[6] Status` | Services, access mode and tunnel URL |
+
+Each action is also available as a flag (`--panel`, `--wings`, `--tunnel`,
+`--node`, `--user`, `--status`). Full details: [MENU.md](MENU.md).
+
+---
+
 ## Method 2: Manual Installation (Advanced)
 
 For hosting providers or administrators who wish to configure each component manually:

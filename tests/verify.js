@@ -30,6 +30,7 @@ console.log('\x1b[35m[1] Shell Script Files Existence & Shebangs\x1b[0m');
 const expectedScripts = [
     'install.sh',
     'installer/install.sh',
+    'installer/nova-menu.sh',
     'installer/common.sh',
     'installer/backup.sh',
     'installer/restore.sh',
@@ -178,6 +179,7 @@ assert('nova-mark.svg brand mark exists', fs.existsSync(svgMark));
 console.log('\n\x1b[35m[9] CLI Commands in installer/nova-cli.sh\x1b[0m');
 const cliContent = fs.readFileSync(path.join(INSTALLER_DIR, 'nova-cli.sh'), 'utf8');
 const requiredCommands = [
+    'menu',
     'status',
     'install',
     'update',
@@ -193,8 +195,56 @@ for (const cmd of requiredCommands) {
     assert(`CLI implements command: nova ${cmd}`, cliContent.includes(`cmd_${cmd}`) || cliContent.includes(`${cmd})`));
 }
 
-// 10. CodeSandbox & Development Environment Configurations
-console.log('\n\x1b[35m[10] CodeSandbox & Development Configurations\x1b[0m');
+// 10. Interactive Setup Menu (buttons) & Secure Form Handling
+console.log('\n\x1b[35m[10] Interactive Setup Menu & Secure Form Handling\x1b[0m');
+const menuPath = path.join(INSTALLER_DIR, 'nova-menu.sh');
+assert('Setup menu exists: installer/nova-menu.sh', fs.existsSync(menuPath));
+if (fs.existsSync(menuPath)) {
+    const menu = fs.readFileSync(menuPath, 'utf8');
+    assert('Menu exposes "Install Panel"', menu.includes('Install Panel'));
+    assert('Menu exposes "Install Wings"', menu.includes('Install Wings'));
+    assert('Menu exposes "Setup Tunnel"', menu.includes('Setup Tunnel'));
+    assert('Menu exposes "Auto Node"', menu.includes('Auto Node'));
+    assert('Menu exposes "Create User"', menu.includes('Create User'));
+    assert('Menu installs cloudflared via APT', menu.includes('install_cloudflared_apt'));
+    assert('Menu prompts for a Cloudflare tunnel token', menu.includes('Paste your Cloudflare Tunnel Token'));
+    assert('Menu asks for a node IP address', menu.includes('Node IP address or hostname'));
+    assert('Menu provisions nodes through the helper', menu.includes('auto-node.php'));
+    assert('Menu creates users through the helper', menu.includes('create-user.php'));
+}
+
+const tunnelModule = fs.readFileSync(path.join(INSTALLER_DIR, 'modules', 'access', 'tunnel.sh'), 'utf8');
+assert('Cloudflare APT repository is configured', tunnelModule.includes('https://pkg.cloudflare.com/cloudflared any main'));
+
+const autoNodeHelper = path.join(INSTALLER_DIR, 'helpers', 'auto-node.php');
+assert('Auto node helper exists', fs.existsSync(autoNodeHelper));
+if (fs.existsSync(autoNodeHelper)) {
+    const helper = fs.readFileSync(autoNodeHelper, 'utf8');
+    assert('Auto node helper boots the Laravel app', helper.includes('bootstrap/app.php'));
+    assert('Auto node helper seeds allocations', helper.includes('AssignmentService'));
+    assert('Auto node helper leaves the node out of maintenance', helper.includes("'maintenance_mode' => false"));
+}
+
+const createUserHelper = path.join(INSTALLER_DIR, 'helpers', 'create-user.php');
+assert('Create user helper exists', fs.existsSync(createUserHelper));
+if (fs.existsSync(createUserHelper)) {
+    const helper = fs.readFileSync(createUserHelper, 'utf8');
+    assert('Create user helper uses UserCreationService', helper.includes('UserCreationService'));
+    assert('Create user helper hashes updated passwords', helper.includes('Hash::make'));
+}
+
+const secureFormsPath = path.join(PANEL_DIR, 'public', 'js', 'secure-forms.js');
+assert('Secure form handler exists', fs.existsSync(secureFormsPath));
+if (fs.existsSync(secureFormsPath)) {
+    const js = fs.readFileSync(secureFormsPath, 'utf8');
+    assert('Secure form handler submits with fetch()', js.includes('fetch(action'));
+    assert('Secure form handler keeps the FormData payload', js.includes('new FormData(form)'));
+    assert('Secure form handler preserves submitter values', js.includes('submitter'));
+    assert('admin layout loads secure-forms.js', adminLayout.includes('/js/secure-forms.js'));
+}
+
+// 11. CodeSandbox & Development Environment Configurations
+console.log('\n\x1b[35m[11] CodeSandbox & Development Configurations\x1b[0m');
 const csbTasks = path.join(ROOT_DIR, '.codesandbox', 'tasks.json');
 assert('.codesandbox/tasks.json exists', fs.existsSync(csbTasks));
 if (fs.existsSync(csbTasks)) {
