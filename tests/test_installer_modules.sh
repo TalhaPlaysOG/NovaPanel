@@ -105,6 +105,10 @@ assert_true "create-user helper exists" '[[ -f "${INSTALLER_DIR}/helpers/create-
 assert_true "Menu installs cloudflared via APT" 'grep -q "install_cloudflared_apt" "${INSTALLER_DIR}/nova-menu.sh"'
 assert_true "Tunnel module configures the Cloudflare APT repo" 'grep -q "https://pkg.cloudflare.com/cloudflared any main" "${INSTALLER_DIR}/modules/access/tunnel.sh"'
 
+assert_true "One-command launcher opens the menu by default" 'grep -q "LAUNCH_SCRIPT=\"installer/nova-menu.sh\"" "${REPO_ROOT}/install.sh"'
+assert_true "One-command launcher supports --auto" 'grep -q -- "--auto|--install|--classic" "${REPO_ROOT}/install.sh"'
+assert_true "Menu requires root for panel installation" 'grep -q "Installing the panel requires root privileges" "${INSTALLER_DIR}/nova-menu.sh"'
+
 if command -v php >/dev/null 2>&1; then
     for helper in "${INSTALLER_DIR}/helpers/auto-node.php" "${INSTALLER_DIR}/helpers/create-user.php"; do
         if php -l "$helper" >/dev/null 2>&1; then

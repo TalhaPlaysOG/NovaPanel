@@ -9,13 +9,25 @@ account without remembering Artisan commands.
 
 ## Launching the menu
 
+The one-command launcher opens the menu by default:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/TalhaPlaysOG/NovaPanel/main/install.sh)
+```
+
+To run the automated installer without the menu, add `--auto`:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/TalhaPlaysOG/NovaPanel/main/install.sh) --auto
+```
+
 From a cloned repository:
 
 ```bash
 sudo bash installer/nova-menu.sh
 ```
 
-Directly from the internet (no clone required):
+Directly from the internet (menu script only, no clone required):
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/TalhaPlaysOG/NovaPanel/main/installer/nova-menu.sh)
@@ -37,6 +49,8 @@ Every entry can also be run non-interactively, which is handy for automation:
 | `--node` | Create a node from an IP |
 | `--user` | Create a panel user |
 | `--status` | Show service and access status |
+| `--update` | Update the panel to the latest release |
+| `--repair` | Run diagnostics and fix common issues |
 
 ```bash
 sudo bash installer/nova-menu.sh --node
@@ -53,6 +67,8 @@ sudo bash installer/nova-menu.sh --node
 [4] Auto Node        Create a node from an IP and bring it online
 [5] Create User      Add a panel account or administrator
 [6] Status           Services, nodes and access configuration
+[7] Update Panel     Latest release, migrations, caches
+[8] Repair Panel     Diagnostics and common fixes
 [0] Exit
 ```
 
@@ -133,6 +149,18 @@ The generated password is printed once at the end of the operation.
 ### [6] Status
 
 Shortcut for `nova status` — services, access mode and tunnel URL.
+
+### [7] Update Panel
+
+Runs `installer/update.sh`: downloads the latest release, updates Composer
+dependencies, runs migrations, rebuilds caches, and restarts services. Requires
+a previously installed panel and root on production hosts.
+
+### [8] Repair Panel
+
+Runs `installer/repair.sh`: checks core services, permissions, storage links,
+queue workers and configuration, restarting or fixing what it can. Safe to run
+repeatedly.
 
 ---
 

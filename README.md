@@ -33,29 +33,14 @@ Rather than reinventing or breaking the rock-solid game management architecture 
 
 ## Quick Start (One-Command Installer)
 
-### Option A: Production VPS Mode (Ubuntu / Debian)
-Deploy Nova Panel on a clean Ubuntu (20.04, 22.04, 24.04 LTS) or Debian (11, 12) server:
+### Option A: Interactive Setup Menu (Recommended)
+Run this on a clean Ubuntu (20.04, 22.04, 24.04 LTS) or Debian (11, 12) server as root:
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/TalhaPlaysOG/NovaPanel/main/install.sh)
 ```
 
-### Option B: CodeSandbox & Local Dev Mode
-Open this repository in a CodeSandbox Devbox (~8 GiB RAM) or run locally without root permissions:
-
-```bash
-bash install.sh --dev
-```
-- Automatically configures a zero-dependency SQLite database.
-- Binds to `0.0.0.0:8000` with automated CodeSandbox HTTPS port preview.
-- Enables panel-only testing for accounts, UI, egg management, and APIs without requiring systemd or kernel cgroups. See [`docs/CODESANDBOX.md`](docs/CODESANDBOX.md).
-
-### Option C: Interactive Setup Menu (Buttons)
-Prefer a menu over long commands? Launch the button-driven setup screen:
-
-```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/TalhaPlaysOG/NovaPanel/main/installer/nova-menu.sh)
-```
+The menu opens with numbered buttons:
 
 | Button | What it does |
 | :--- | :--- |
@@ -65,8 +50,29 @@ bash <(curl -fsSL https://raw.githubusercontent.com/TalhaPlaysOG/NovaPanel/main/
 | `[4] Auto Node` | Asks for an IP, creates the node, seeds ports and brings Wings online |
 | `[5] Create User` | Creates a panel account (optionally a root administrator) |
 | `[6] Status` | Shows services, nodes and access configuration |
+| `[7] Update Panel` | Fetches the latest release, runs migrations and clears caches |
+| `[8] Repair Panel` | Runs diagnostics and fixes common service/permission issues |
 
 After installation the same menu is available as `sudo nova menu`. See [`docs/MENU.md`](docs/MENU.md) for details.
+
+### Option B: Automated Install (No Menu)
+Skip the menu and run the linear installer with auto-detected settings:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/TalhaPlaysOG/NovaPanel/main/install.sh) --auto
+```
+
+Add `--prod` (or `--dev`) to force a deployment mode: `... --auto --prod`.
+
+### Option C: CodeSandbox & Local Dev Mode
+Open this repository in a CodeSandbox Devbox (~8 GiB RAM) or run locally without root permissions:
+
+```bash
+bash install.sh --dev
+```
+- Automatically configures a zero-dependency SQLite database.
+- Binds to `0.0.0.0:8000` with automated CodeSandbox HTTPS port preview.
+- Enables panel-only testing for accounts, UI, egg management, and APIs without requiring systemd or kernel cgroups. See [`docs/CODESANDBOX.md`](docs/CODESANDBOX.md).
 
 ---
 

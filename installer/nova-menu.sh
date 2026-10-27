@@ -9,6 +9,8 @@
 #   4) Auto Node              - create a node from an IP and bring it online
 #   5) Create User            - add a new panel account / administrator
 #   6) Status                 - show services and access configuration
+#   7) Update Panel           - pull the latest release and migrate
+#   8) Repair Panel           - diagnostics and common fixes
 #
 # Usage:
 #   sudo bash installer/nova-menu.sh          # interactive menu
@@ -34,6 +36,8 @@ Options:
   --node            Create a node from an IP address and bring it online
   --user            Create a new panel user
   --status          Show service and access status
+  --update          Update Nova Panel to the latest release
+  --repair          Run diagnostics and fix common issues
   --dev             Force development / CodeSandbox mode
   --prod            Force production VPS mode
   -h, --help        Show this help
@@ -97,6 +101,12 @@ while [[ $# -gt 0 ]]; do
             ;;
         --status)
             REQUESTED_ACTION="status"
+            ;;
+        --update|--upgrade)
+            REQUESTED_ACTION="update"
+            ;;
+        --repair|--doctor)
+            REQUESTED_ACTION="repair"
             ;;
         --menu)
             REQUESTED_ACTION=""
@@ -181,9 +191,16 @@ is_root() {
     [[ ${EUID} -eq 0 ]]
 }
 
+is_sandbox() {
+    [[ -n "${CODESANDBOX_HOST:-}${CODESANDBOX_SSE:-}${CSB:-}${SANDBOX_ID:-}" || -f "/etc/sandbox" ]]
+}
+
 require_production() {
     if [[ "${DEPLOY_MODE}" != "production" ]]; then
         print_warning "This action requires a production Linux host (root, systemd and APT packages)."
+        if ! is_root; then
+            print_info "Re-run the menu as root: sudo bash ${BASH_SOURCE[0]}"
+        fi
         print_info "Current mode: ${DEPLOY_MODE} (development / CodeSandbox)."
         return 1
     fi
@@ -360,6 +377,12 @@ verify_wings_api() {
 # ------------------------------------------------------------------------------
 menu_install_panel() {
     print_step "Install Nova Panel"
+
+    if ! is_root && ! is_sandbox; then
+        print_error "Installing the panel requires root privileges."
+        print_info "Re-run with: sudo bash ${BASH_SOURCE[0]} --panel"
+        return 1
+    fi
 
     if panel_is_installed; then
         print_warning "Nova Panel already looks installed at ${PANEL_DIR}."
@@ -786,6 +809,48 @@ menu_status() {
 }
 
 # ------------------------------------------------------------------------------
+# Action 7: Update Panel
+# ------------------------------------------------------------------------------
+menu_update_panel() {
+    print_step "Update Nova Panel"
+
+    require_panel_installed || return 1
+
+    if [[ "${DEPLOY_MODE}" == "production" ]] && ! is_root; then
+        print_error "Updating a production panel requires root privileges."
+        print_info "Re-run with: sudo bash ${BASH_SOURCE[0]} --update"
+        return 1
+    fi
+
+    if bash "${SCRIPT_DIR}/update.sh"; then
+        print_success "Update finished."
+    else
+        print_error "The update script reported an error. Review ${INSTALL_LOG}"
+        return 1
+    fi
+}
+
+# ------------------------------------------------------------------------------
+# Action 8: Repair Panel
+# ------------------------------------------------------------------------------
+menu_repair_panel() {
+    print_step "Repair Nova Panel"
+
+    if [[ "${DEPLOY_MODE}" == "production" ]] && ! is_root; then
+        print_error "Repairing a production panel requires root privileges."
+        print_info "Re-run with: sudo bash ${BASH_SOURCE[0]} --repair"
+        return 1
+    fi
+
+    if bash "${SCRIPT_DIR}/repair.sh"; then
+        print_success "Repair finished."
+    else
+        print_error "The repair script reported an error. Review ${INSTALL_LOG}"
+        return 1
+    fi
+}
+
+# ------------------------------------------------------------------------------
 # Menu
 # ------------------------------------------------------------------------------
 print_menu() {
@@ -806,6 +871,8 @@ print_menu() {
     echo -e "  ${BOLD}[4]${RESET}  Auto Node           ${DIM}Create a node from an IP and bring it online${RESET}"
     echo -e "  ${BOLD}[5]${RESET}  Create User         ${DIM}Add a panel account or administrator${RESET}"
     echo -e "  ${BOLD}[6]${RESET}  Status              ${DIM}Services, nodes and access configuration${RESET}"
+    echo -e "  ${BOLD}[7]${RESET}  Update Panel        ${DIM}Fetch the latest release, migrate and clear caches${RESET}"
+    echo -e "  ${BOLD}[8]${RESET}  Repair Panel        ${DIM}Diagnose services and fix common issues${RESET}"
     echo -e "  ${BOLD}[0]${RESET}  Exit"
     echo ""
 }
@@ -824,6 +891,8 @@ run_menu() {
             4) menu_auto_node; pause_menu ;;
             5) menu_create_user; pause_menu ;;
             6) menu_status; pause_menu ;;
+            7) menu_update_panel; pause_menu ;;
+            8) menu_repair_panel; pause_menu ;;
             0|q|Q|exit|quit) exit 0 ;;
             *) print_warning "Invalid selection '${choice}'."; sleep 1 ;;
         esac
@@ -833,6 +902,10 @@ run_menu() {
 # ------------------------------------------------------------------------------
 # Entry point
 # ------------------------------------------------------------------------------
+if ! is_root && ! is_sandbox; then
+    print_warning "Running without root: actions that install or change services will need sudo."
+fi
+
 case "${REQUESTED_ACTION}" in
     panel) menu_install_panel ;;
     wings) menu_install_wings ;;
@@ -840,5 +913,7 @@ case "${REQUESTED_ACTION}" in
     node) menu_auto_node ;;
     user) menu_create_user ;;
     status) menu_status ;;
+    update) menu_update_panel ;;
+    repair) menu_repair_panel ;;
     *) run_menu ;;
 esac

@@ -31,6 +31,16 @@ Run the following command as `root` on a fresh server:
 bash <(curl -fsSL https://raw.githubusercontent.com/TalhaPlaysOG/NovaPanel/main/install.sh)
 ```
 
+This opens the interactive setup menu. Choose `[1] Install Panel` to start the
+automated installation, or use any other option (Wings, tunnel, node, user).
+
+To skip the menu entirely and run the automated installer directly, append
+`--auto`:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/TalhaPlaysOG/NovaPanel/main/install.sh) --auto
+```
+
 The installer will interactively prompt you for:
 1. **Access Mode**:
    - `[1] IP Address`: Direct IP access (e.g. `http://YOUR_SERVER_IP`).
@@ -56,20 +66,20 @@ The installer will interactively prompt you for:
 
 ---
 
-## Method 1b: Interactive Setup Menu (Buttons)
+## Method 1b: Menu Shortcuts & Non-Interactive Flags
 
-If you prefer selecting actions from a menu instead of running individual
-commands, use the setup menu:
+The setup menu shown by Method 1 can also be launched directly, which is handy
+after the panel is already installed:
+
+```bash
+sudo nova menu
+sudo bash installer/nova-menu.sh
+```
+
+Directly from the internet (no clone required):
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/TalhaPlaysOG/NovaPanel/main/installer/nova-menu.sh)
-```
-
-Or, from a cloned repository / an installed panel:
-
-```bash
-sudo bash installer/nova-menu.sh
-sudo nova menu
 ```
 
 | Button | Action |
@@ -80,9 +90,16 @@ sudo nova menu
 | `[4] Auto Node` | Asks for the node IP, registers the node, seeds ports and starts Wings so it comes online |
 | `[5] Create User` | Creates a panel account (optionally a root administrator) |
 | `[6] Status` | Services, access mode and tunnel URL |
+| `[7] Update Panel` | Runs `installer/update.sh` (latest release, migrations, caches) |
+| `[8] Repair Panel` | Runs `installer/repair.sh` (diagnostics and fixes) |
 
 Each action is also available as a flag (`--panel`, `--wings`, `--tunnel`,
-`--node`, `--user`, `--status`). Full details: [MENU.md](MENU.md).
+`--node`, `--user`, `--status`, `--update`, `--repair`). Full details:
+[MENU.md](MENU.md).
+
+The one-command launcher supports `--menu` (default), `--auto` (automated
+install without the menu), `--dev` / `--prod` (forced mode) and `--repo` /
+`--branch` (alternative source). Full details: [MENU.md](MENU.md).
 
 ---
 

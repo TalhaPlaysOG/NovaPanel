@@ -206,12 +206,20 @@ if (fs.existsSync(menuPath)) {
     assert('Menu exposes "Setup Tunnel"', menu.includes('Setup Tunnel'));
     assert('Menu exposes "Auto Node"', menu.includes('Auto Node'));
     assert('Menu exposes "Create User"', menu.includes('Create User'));
+    assert('Menu exposes "Update Panel"', menu.includes('Update Panel'));
+    assert('Menu exposes "Repair Panel"', menu.includes('Repair Panel'));
     assert('Menu installs cloudflared via APT', menu.includes('install_cloudflared_apt'));
     assert('Menu prompts for a Cloudflare tunnel token', menu.includes('Paste your Cloudflare Tunnel Token'));
     assert('Menu asks for a node IP address', menu.includes('Node IP address or hostname'));
     assert('Menu provisions nodes through the helper', menu.includes('auto-node.php'));
     assert('Menu creates users through the helper', menu.includes('create-user.php'));
+    assert('Menu requires root for panel installation', menu.includes('Installing the panel requires root privileges'));
 }
+
+const rootLauncher = fs.readFileSync(path.join(ROOT_DIR, 'install.sh'), 'utf8');
+assert('One-command installer opens the setup menu by default', rootLauncher.includes('LAUNCH_SCRIPT="installer/nova-menu.sh"'));
+assert('One-command installer keeps an --auto mode', rootLauncher.includes('--auto|--install|--classic'));
+assert('One-command installer documents --help', rootLauncher.includes('print_launcher_help'));
 
 const tunnelModule = fs.readFileSync(path.join(INSTALLER_DIR, 'modules', 'access', 'tunnel.sh'), 'utf8');
 assert('Cloudflare APT repository is configured', tunnelModule.includes('https://pkg.cloudflare.com/cloudflared any main'));

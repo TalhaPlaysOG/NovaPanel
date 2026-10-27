@@ -2,26 +2,70 @@
 # ==============================================================================
 # Nova Panel - Quick Launch & One-Command Installer
 # Usage:
-#   bash <(curl -fsSL https://raw.githubusercontent.com/TalhaPlaysOG/NovaPanel/main/install.sh)
+#   bash <(curl -fsSL .../install.sh)          # interactive setup menu (default)
+#   bash <(curl -fsSL .../install.sh) --auto   # automated install, no menu
+#   bash <(curl -fsSL .../install.sh) --dev    # development / CodeSandbox install
 # ==============================================================================
 
 set -eo pipefail
 
-# Require root
-if [[ $EUID -ne 0 ]]; then
-    echo -e "\033[38;5;196mError:\033[0m This installer must be run as root. Run with: sudo bash $0" >&2
-    exit 1
-fi
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || echo "")"
 
-# Launch the interactive setup menu instead of the linear installer
-LAUNCH_SCRIPT="installer/install.sh"
+print_launcher_help() {
+    cat << 'EOF'
+Nova Panel - One-Command Launcher
+
+Usage: bash install.sh [OPTIONS]
+
+With no options the interactive setup menu opens, where you can install the
+panel, install Wings, set up a Cloudflare tunnel, add a node, or create a user.
+
+Options:
+  --menu             Open the interactive setup menu (default)
+  --auto             Run the full automated installer (auto-detected mode)
+  --dev              Run the automated installer in development mode
+  --prod             Run the automated installer in production mode
+  --repo owner/repo  Override the GitHub repository (default: TalhaPlaysOG/NovaPanel)
+  --branch name      Override the git branch (default: main)
+  --panel, --wings, --tunnel, --node, --user, --status, --update, --repair
+                     Run a single menu action directly
+  -h, --help         Show this help
+EOF
+}
+
+# Choose what to launch:
+#   no flags      -> interactive setup menu ("buttons")
+#   --auto        -> automated linear installer
+#   --dev/--prod  -> automated linear installer with a forced mode
+LAUNCH_SCRIPT="installer/nova-menu.sh"
+INTERACTIVE_MENU=1
+
 for arg in "$@"; do
     case "$arg" in
-        --menu) LAUNCH_SCRIPT="installer/nova-menu.sh" ;;
+        --menu)
+            LAUNCH_SCRIPT="installer/nova-menu.sh"
+            INTERACTIVE_MENU=1
+            ;;
+        --auto|--install|--classic|--dev|--development|--prod|--production)
+            LAUNCH_SCRIPT="installer/install.sh"
+            INTERACTIVE_MENU=0
+            ;;
+        -h|--help)
+            print_launcher_help
+            exit 0
+            ;;
     esac
 done
+
+# Root is mandatory for the linear installer. The menu opens for everyone, and
+# each action validates the privileges it needs (so status still works).
+if [[ $EUID -ne 0 ]]; then
+    if [[ $INTERACTIVE_MENU -eq 0 ]]; then
+        echo -e "\033[38;5;196mError:\033[0m This installer must be run as root. Run with: sudo bash $0" >&2
+        exit 1
+    fi
+    echo -e "\033[38;5;220mNote:\033[0m Menu actions that install or change services need root. Re-run with sudo for full access."
+fi
 
 # If running directly from a cloned local repository
 if [[ -n "${SCRIPT_DIR}" && -f "${SCRIPT_DIR}/${LAUNCH_SCRIPT}" ]]; then
@@ -29,7 +73,7 @@ if [[ -n "${SCRIPT_DIR}" && -f "${SCRIPT_DIR}/${LAUNCH_SCRIPT}" ]]; then
 fi
 
 # If running via remote pipe: curl -fsSL ... | bash
-echo -e "\033[38;5;45m==>\033[0m Initializing Nova Panel One-Command Installer..."
+echo -e "\033[38;5;45m==>\033[0m Initializing Nova Panel..."
 
 GITHUB_REPO="${NOVA_REPO:-TalhaPlaysOG/NovaPanel}"
 GITHUB_BRANCH="${NOVA_BRANCH:-main}"

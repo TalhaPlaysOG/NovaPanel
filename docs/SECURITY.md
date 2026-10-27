@@ -44,8 +44,11 @@ curl -fsSL https://raw.githubusercontent.com/TalhaPlaysOG/NovaPanel/main/install
 # 2. Inspect the script content
 less install.sh
 
-# 3. Execute locally once verified
+# 3. Execute locally once verified (opens the setup menu)
 sudo bash install.sh
+
+# ...or run the automated installer without the menu
+sudo bash install.sh --auto
 ```
 
 ---
