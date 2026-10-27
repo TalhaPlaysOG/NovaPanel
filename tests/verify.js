@@ -214,7 +214,39 @@ if (fs.existsSync(menuPath)) {
     assert('Menu provisions nodes through the helper', menu.includes('auto-node.php'));
     assert('Menu creates users through the helper', menu.includes('create-user.php'));
     assert('Menu requires root for panel installation', menu.includes('Installing the panel requires root privileges'));
+    assert('Menu explains systemd/container limits', menu.includes('No systemd init detected'));
+    assert('Menu points WSL users at systemd', menu.includes('WSL detected without systemd'));
+    assert('Menu root check does not exit the loop', menu.includes('require_root_for_action'));
 }
+
+const commonModule = fs.readFileSync(path.join(INSTALLER_DIR, 'common.sh'), 'utf8');
+assert('Environment detection prefers systemd over root for VPS mode', commonModule.includes('if [[ $IS_CODESANDBOX -eq 1 || $HAS_SYSTEMD -eq 0 ]]; then'));
+assert('Environment detection reports the PID 1 process', commonModule.includes('SYSTEMD_PID1'));
+assert('Environment detection recognizes WSL', commonModule.includes('IS_WSL=1'));
+assert('Composer bootstrap helper exists', commonModule.includes('ensure_composer()'));
+assert('Dotenv reader helper exists', commonModule.includes('read_env_value()'));
+
+const installerEntry = fs.readFileSync(path.join(INSTALLER_DIR, 'install.sh'), 'utf8');
+assert('Installer resolves Composer explicitly', installerEntry.includes('COMPOSER_BIN'));
+assert('Installer retries Composer with platform bypass', installerEntry.includes('--ignore-platform-reqs'));
+assert('Installer no longer uses the non-existent vendor archive fallback', !installerEntry.includes('panel-vendor.tar.gz'));
+assert('Installer preserves APP_KEY across reinstalls', installerEntry.includes('APP_KEY_VALUE="$(read_env_value'));
+assert('Installer preserves HASHIDS_SALT across reinstalls', installerEntry.includes('HASHIDS_SALT_VALUE="$(read_env_value'));
+assert('Dependencies module uses the Composer bootstrap helper', fs.readFileSync(path.join(INSTALLER_DIR, 'modules', 'dependencies.sh'), 'utf8').includes('ensure_composer'));
+
+const databaseModule = fs.readFileSync(path.join(INSTALLER_DIR, 'modules', 'database.sh'), 'utf8');
+assert('Database reuses credentials from a previous install', databaseModule.includes('saved_db_password'));
+assert('Database reads the saved database name', databaseModule.includes('saved_db_name'));
+
+const nodeRegistrationModule = fs.readFileSync(path.join(INSTALLER_DIR, 'modules', 'node-registration.sh'), 'utf8');
+assert('Tunnel nodes register with the public IP instead of the tunnel hostname', nodeRegistrationModule.includes('ACCESS_MODE:-}" =~ ^tunnel'));
+assert('Node allocations use the resolved node address', nodeRegistrationModule.includes('local node_alloc_ip="${node_fqdn}"'));
+
+const imgDir = path.join(ROOT_DIR, 'img');
+const imgAssets = ['banner.png', 'nova.png', 'nova-mark.png', 'not_found.png', 'server_error.png', 'server_installing.png', 'pterodactyl.png'];
+assert('img/ ships PNG brand assets', imgAssets.every((file) => fs.existsSync(path.join(imgDir, file))), imgAssets.filter((file) => !fs.existsSync(path.join(imgDir, file))).join(', '));
+assert('img/ has no legacy SVG copies', fs.readdirSync(imgDir).every((file) => !file.endsWith('.svg')));
+assert('Installer syncs img/ into /assets/img', fs.readFileSync(path.join(INSTALLER_DIR, 'install.sh'), 'utf8').includes('img/." "${PANEL_DIR}/public/assets/img/"'));
 
 const rootLauncher = fs.readFileSync(path.join(ROOT_DIR, 'install.sh'), 'utf8');
 assert('One-command installer opens the setup menu by default', rootLauncher.includes('LAUNCH_SCRIPT="installer/nova-menu.sh"'));
@@ -223,6 +255,14 @@ assert('One-command installer documents --help', rootLauncher.includes('print_la
 
 const tunnelModule = fs.readFileSync(path.join(INSTALLER_DIR, 'modules', 'access', 'tunnel.sh'), 'utf8');
 assert('Cloudflare APT repository is configured', tunnelModule.includes('https://pkg.cloudflare.com/cloudflared any main'));
+assert('Tunnel resolves the cloudflared binary instead of hardcoding a path', tunnelModule.includes('CLOUDFLARED_BIN='));
+assert('Tunnel records the temporary access mode', tunnelModule.includes('ACCESS_MODE="tunnel_temporary"'));
+assert('Tunnel records the permanent access mode', tunnelModule.includes('ACCESS_MODE="tunnel_permanent"'));
+
+const ipAccessModule = fs.readFileSync(path.join(INSTALLER_DIR, 'modules', 'access', 'ip.sh'), 'utf8');
+const domainAccessModule = fs.readFileSync(path.join(INSTALLER_DIR, 'modules', 'access', 'domain.sh'), 'utf8');
+assert('IP access records the access mode', ipAccessModule.includes('ACCESS_MODE="ip"'));
+assert('Domain access records the access mode', domainAccessModule.includes('ACCESS_MODE="domain"'));
 
 const autoNodeHelper = path.join(INSTALLER_DIR, 'helpers', 'auto-node.php');
 assert('Auto node helper exists', fs.existsSync(autoNodeHelper));

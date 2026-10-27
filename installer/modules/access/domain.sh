@@ -73,6 +73,7 @@ configure_domain_access() {
     done
 
     PANEL_HOST="${domain}"
+    ACCESS_MODE="domain"
     PANEL_PROTOCOL="https"
     PANEL_PORT=443
     PANEL_URL="https://${domain}"

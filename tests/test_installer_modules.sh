@@ -108,6 +108,17 @@ assert_true "Tunnel module configures the Cloudflare APT repo" 'grep -q "https:/
 assert_true "One-command launcher opens the menu by default" 'grep -q "LAUNCH_SCRIPT=\"installer/nova-menu.sh\"" "${REPO_ROOT}/install.sh"'
 assert_true "One-command launcher supports --auto" 'grep -q -- "--auto|--install|--classic" "${REPO_ROOT}/install.sh"'
 assert_true "Menu requires root for panel installation" 'grep -q "Installing the panel requires root privileges" "${INSTALLER_DIR}/nova-menu.sh"'
+assert_true "Menu explains missing systemd" 'grep -q "No systemd init detected" "${INSTALLER_DIR}/nova-menu.sh"'
+assert_true "Environment detection does not demote non-root VPSes" '! grep -q "|| \$HAS_ROOT -eq 0" "${INSTALLER_DIR}/common.sh"'
+assert_true "Composer bootstrap handles minimal PATHs" 'grep -q "ensure_composer()" "${INSTALLER_DIR}/common.sh"'
+assert_true "Installer resolves the Composer binary" 'grep -q "COMPOSER_BIN" "${INSTALLER_DIR}/install.sh"'
+assert_true "Installer dropped the broken vendor archive fallback" '! grep -q "panel-vendor.tar.gz" "${INSTALLER_DIR}/install.sh"'
+assert_true "Dotenv reader helper exists" 'grep -q "read_env_value()" "${INSTALLER_DIR}/common.sh"'
+assert_true "Installer preserves APP_KEY" 'grep -q "APP_KEY_VALUE=" "${INSTALLER_DIR}/install.sh"'
+assert_true "Installer preserves HASHIDS_SALT" 'grep -q "HASHIDS_SALT_VALUE=" "${INSTALLER_DIR}/install.sh"'
+assert_true "Database reuses saved credentials" 'grep -q "saved_db_password" "${INSTALLER_DIR}/modules/database.sh"'
+assert_true "Tunnel resolves the installed cloudflared binary" 'grep -q "CLOUDFLARED_BIN=" "${INSTALLER_DIR}/modules/access/tunnel.sh"'
+assert_true "Tunnel nodes use a direct public address" 'grep -q "ACCESS_MODE:-}.*=~ \^tunnel" "${INSTALLER_DIR}/modules/node-registration.sh"'
 
 if command -v php >/dev/null 2>&1; then
     for helper in "${INSTALLER_DIR}/helpers/auto-node.php" "${INSTALLER_DIR}/helpers/create-user.php"; do

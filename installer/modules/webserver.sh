@@ -36,6 +36,33 @@ EOF
 
     # 2. Production VPS Mode (Nginx + PHP-FPM)
     export DEBIAN_FRONTEND=noninteractive
+
+    # Pterodactyl/Nova requires Nginx on port 80. A preinstalled Apache would
+    # keep Nginx from starting, so offer to retire it before installing Nginx.
+    if ! systemctl is-active --quiet nginx 2>/dev/null; then
+        for legacy_unit in apache2 httpd; do
+            if systemctl is-active --quiet "${legacy_unit}" 2>/dev/null; then
+                print_warning "${legacy_unit} is running and likely occupies port 80."
+                if prompt_confirm "Stop and disable ${legacy_unit} so Nginx can serve Nova Panel?" "Y"; then
+                    systemctl disable --now "${legacy_unit}" >> "${INSTALL_LOG}" 2>&1 || true
+                    print_success "${legacy_unit} stopped and disabled."
+                else
+                    print_fatal "Nginx needs port 80. Stop ${legacy_unit} and re-run the installer."
+                fi
+            fi
+        done
+    fi
+
+    # Warn early if an unknown process is already holding the panel port.
+    if command_exists ss && ! systemctl is-active --quiet nginx 2>/dev/null \
+        && ss -tlpn 2>/dev/null | grep -q ':80 '; then
+        print_warning "Port 80 is already in use before Nginx starts:"
+        ss -tlpn 2>/dev/null | grep ':80 ' | sed 's/^/    /' || true
+        if ! prompt_confirm "Continue anyway? Nginx may fail to bind port 80." "Y"; then
+            print_fatal "Free port 80 and re-run the installer."
+        fi
+    fi
+
     apt-get install -y nginx >> "${INSTALL_LOG}" 2>&1 || print_fatal "Failed to install Nginx."
 
     # Detect PHP-FPM socket
@@ -178,6 +205,15 @@ EOF
     if nginx -t >> "${INSTALL_LOG}" 2>&1; then
         systemctl enable nginx >> "${INSTALL_LOG}" 2>&1
         systemctl restart nginx >> "${INSTALL_LOG}" 2>&1
+
+        if ! systemctl is-active --quiet nginx; then
+            print_error "Nginx was configured but failed to start."
+            systemctl status nginx --no-pager -l 2>/dev/null | tail -n 15 || true
+            print_info "Something else may already be listening on port 80/443:"
+            ss -tlpn 2>/dev/null | grep -E ':(80|443) ' | sed 's/^/    /' || true
+            print_fatal "Stop the conflicting service or free ports 80/443, then re-run the installer."
+        fi
+
         print_success "Nginx successfully configured and reloaded."
     else
         print_error "Nginx configuration test failed!"
@@ -188,5 +224,12 @@ EOF
     local fpm_service="php${PHP_VERSION:-8.2}-fpm"
     systemctl enable "${fpm_service}" >> "${INSTALL_LOG}" 2>&1 || true
     systemctl restart "${fpm_service}" >> "${INSTALL_LOG}" 2>&1 || true
+
+    if ! systemctl is-active --quiet "${fpm_service}"; then
+        print_error "${fpm_service} failed to start."
+        systemctl status "${fpm_service}" --no-pager -l 2>/dev/null | tail -n 15 || true
+        print_fatal "PHP-FPM must be running before Nova Panel can serve requests."
+    fi
+
     print_success "Web server configuration complete.\n"
 }

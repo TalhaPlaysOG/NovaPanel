@@ -146,13 +146,36 @@ EOF
             max_tries=$((max_tries - 1))
         done
 
-        # Database parameters
-        DB_CONNECTION="mysql"
-        DB_NAME="${DB_NAME:-novapanel}"
-        DB_USER="${DB_USER:-novapanel}"
-        DB_HOST="${DB_HOST:-127.0.0.1}"
-        DB_PORT="${DB_PORT:-3306}"
+        # Database parameters. Reuse values from a previous MySQL run so a
+        # failed or repeated install keeps the same database and credentials.
+        local saved_db_connection saved_db_name saved_db_user saved_db_host saved_db_port saved_db_password
+        saved_db_connection=$(read_env_value "${NOVA_CONFIG_DIR}/database.env" DB_CONNECTION 2>/dev/null || true)
+        saved_db_name=""
+        saved_db_user=""
+        saved_db_host=""
+        saved_db_port=""
+        saved_db_password=""
+        if [[ "${saved_db_connection}" == "mysql" ]]; then
+            saved_db_name=$(read_env_value "${NOVA_CONFIG_DIR}/database.env" DB_DATABASE 2>/dev/null || true)
+            saved_db_user=$(read_env_value "${NOVA_CONFIG_DIR}/database.env" DB_USERNAME 2>/dev/null || true)
+            saved_db_host=$(read_env_value "${NOVA_CONFIG_DIR}/database.env" DB_HOST 2>/dev/null || true)
+            saved_db_port=$(read_env_value "${NOVA_CONFIG_DIR}/database.env" DB_PORT 2>/dev/null || true)
+            saved_db_password=$(read_env_value "${NOVA_CONFIG_DIR}/database.env" DB_PASSWORD 2>/dev/null || true)
+        fi
 
+        if [[ -z "${saved_db_password}" ]]; then
+            saved_db_password=$(read_env_value "${PANEL_DIR}/.env" DB_PASSWORD 2>/dev/null || true)
+        fi
+
+        DB_CONNECTION="mysql"
+        DB_NAME="${DB_NAME:-${saved_db_name:-novapanel}}"
+        DB_USER="${DB_USER:-${saved_db_user:-novapanel}}"
+        DB_HOST="${DB_HOST:-${saved_db_host:-127.0.0.1}}"
+        DB_PORT="${DB_PORT:-${saved_db_port:-3306}}"
+
+        if [[ -z "${DB_PASSWORD:-}" ]]; then
+            DB_PASSWORD="${saved_db_password}"
+        fi
         if [[ -z "${DB_PASSWORD:-}" ]]; then
             DB_PASSWORD=$(generate_random_token 32)
         fi

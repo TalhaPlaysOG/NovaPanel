@@ -196,15 +196,35 @@ is_sandbox() {
 }
 
 require_production() {
-    if [[ "${DEPLOY_MODE}" != "production" ]]; then
-        print_warning "This action requires a production Linux host (root, systemd and APT packages)."
-        if ! is_root; then
-            print_info "Re-run the menu as root: sudo bash ${BASH_SOURCE[0]}"
-        fi
-        print_info "Current mode: ${DEPLOY_MODE} (development / CodeSandbox)."
-        return 1
+    if [[ "${DEPLOY_MODE}" == "production" ]]; then
+        return 0
     fi
-    return 0
+
+    print_warning "This action needs a production Linux VPS (Ubuntu/Debian with systemd and APT)."
+
+    if [[ "${IS_CODESANDBOX:-0}" == "1" ]]; then
+        print_info "Sandbox detected: panel-only development mode is active, so system services cannot be installed."
+    elif [[ "${IS_WSL:-0}" == "1" ]]; then
+        print_info "WSL detected without systemd. Enable it in /etc/wsl.conf ([boot] systemd=true), run 'wsl --shutdown', then retry."
+    elif [[ "${HAS_SYSTEMD:-0}" != "1" ]]; then
+        print_info "No systemd init detected (PID 1: ${SYSTEMD_PID1:-unknown}). Containers/chroots cannot run Wings or cloudflared as services."
+    elif ! is_root; then
+        print_info "You are not root. Re-run with: sudo bash ${BASH_SOURCE[0]}"
+    fi
+
+    print_info "Panel-only development mode still works: use option [1] to install the panel without Wings."
+    return 1
+}
+
+# Non-fatal root check for menu actions (require_root exits the whole menu).
+require_root_for_action() {
+    if is_root; then
+        return 0
+    fi
+
+    print_error "This action requires root privileges."
+    print_info "Re-run as root: sudo bash ${BASH_SOURCE[0]}"
+    return 1
 }
 
 panel_is_installed() {
@@ -396,6 +416,10 @@ menu_install_panel() {
         print_fatal "Production installation requires root. Run: sudo bash ${BASH_SOURCE[0]}"
     fi
 
+    if [[ "${DEPLOY_MODE}" != "production" ]]; then
+        print_info "Development/panel-only mode: the panel will use SQLite and 'php artisan serve' (no Wings)."
+    fi
+
     print_info "Launching the automated installer..."
     if bash "${SCRIPT_DIR}/install.sh" "${FORWARD_ARGS[@]}"; then
         print_success "Panel installation finished."
@@ -412,7 +436,7 @@ menu_install_wings() {
     print_step "Install Wings Daemon"
 
     require_production || return 1
-    require_root
+    require_root_for_action || return 1
 
     install_docker_engine
     install_wings_binary
@@ -458,7 +482,7 @@ menu_setup_tunnel() {
     print_step "Setup Cloudflare Tunnel"
 
     require_production || return 1
-    require_root
+    require_root_for_action || return 1
 
     print_info "This installs the cloudflared client and connects it with your tunnel token."
     print_info "Create the tunnel in Cloudflare Zero Trust -> Networks -> Tunnels and copy its token."
@@ -576,7 +600,7 @@ menu_auto_node() {
 
     require_production || return 1
     require_panel_installed || return 1
-    require_root
+    require_root_for_action || return 1
 
     # Auto Node is a one-shot setup: make sure the daemon is actually present.
     if ! command_exists docker; then
@@ -862,6 +886,16 @@ print_menu() {
         echo -e " ${GREEN}●${RESET} Panel detected at ${BOLD}${PANEL_DIR}${RESET}"
     else
         echo -e " ${YELLOW}●${RESET} Panel not installed on this machine yet"
+    fi
+
+    if [[ "${DEPLOY_MODE}" != "production" ]]; then
+        if [[ "${IS_WSL:-0}" == "1" ]]; then
+            echo -e " ${YELLOW}!${RESET} WSL without systemd: options 2-4 require systemd or a real VPS"
+        elif [[ "${HAS_SYSTEMD:-0}" != "1" ]]; then
+            echo -e " ${YELLOW}!${RESET} No systemd detected: options 2-4 need an Ubuntu/Debian VPS"
+        elif ! is_root; then
+            echo -e " ${YELLOW}!${RESET} Not root: re-run with sudo to install packages and services"
+        fi
     fi
 
     echo ""

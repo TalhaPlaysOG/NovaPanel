@@ -12,12 +12,25 @@ install_cloudflared_binary() {
 
         curl -fsSL -o /usr/local/bin/cloudflared "${cf_url}" >> "${INSTALL_LOG}" 2>&1 || print_fatal "Failed to download cloudflared."
         chmod +x /usr/local/bin/cloudflared
+        case ":${PATH}:" in
+            *:/usr/local/bin:*) ;;
+            *) export PATH="/usr/local/bin:${PATH}" ;;
+        esac
+        hash -r 2>/dev/null || true
     fi
     print_success "cloudflared binary ready: $(cloudflared --version | head -n 1)"
 }
 
 # Install cloudflared from Cloudflare's official APT repository (recommended).
 install_cloudflared_apt() {
+    # APT installs to /usr/bin, while the binary fallback uses /usr/local/bin.
+    # Make sure both locations are reachable before deciding it is missing.
+    case ":${PATH}:" in
+        *:/usr/local/bin:*) ;;
+        *) export PATH="/usr/local/bin:${PATH}" ;;
+    esac
+    hash -r 2>/dev/null || true
+
     if command_exists cloudflared; then
         print_info "cloudflared is already installed: $(cloudflared --version 2>/dev/null | head -n 1)"
         return 0
@@ -79,6 +92,20 @@ configure_tunnel_access() {
 
     install_cloudflared_apt || return 1
 
+    CLOUDFLARED_BIN="$(command -v cloudflared 2>/dev/null || true)"
+    if [[ -z "${CLOUDFLARED_BIN}" ]]; then
+        for candidate in /usr/local/bin/cloudflared /usr/bin/cloudflared; do
+            if [[ -x "${candidate}" ]]; then
+                CLOUDFLARED_BIN="${candidate}"
+                break
+            fi
+        done
+    fi
+    if [[ -z "${CLOUDFLARED_BIN}" ]]; then
+        print_error "cloudflared was installed but its binary could not be located."
+        return 1
+    fi
+
     if [[ "$tunnel_choice" == "1" ]]; then
         configure_temporary_tunnel
     else
@@ -101,7 +128,7 @@ After=network.target nginx.service
 [Service]
 Type=simple
 User=root
-ExecStart=/usr/local/bin/cloudflared tunnel --url http://127.0.0.1:80 --logfile /var/log/nova-panel/tunnel.log --metrics 127.0.0.1:49312
+ExecStart=${CLOUDFLARED_BIN:-/usr/bin/cloudflared} tunnel --url http://127.0.0.1:80 --logfile /var/log/nova-panel/tunnel.log --metrics 127.0.0.1:49312
 Restart=always
 RestartSec=5
 StandardOutput=append:/var/log/nova-panel/tunnel.log
@@ -138,6 +165,7 @@ EOF
     fi
 
     PANEL_HOST=$(echo "$temp_url" | sed -e 's|^https://||')
+    ACCESS_MODE="tunnel_temporary"
     PANEL_PROTOCOL="https"
     PANEL_PORT=443
     PANEL_URL="${temp_url}"
@@ -192,7 +220,7 @@ EOF
 
     # Install cloudflared service with token
     print_info "Installing cloudflared service..."
-    if ! /usr/local/bin/cloudflared service install "${cf_token}" >> "${INSTALL_LOG}" 2>&1; then
+    if ! "${CLOUDFLARED_BIN:-/usr/bin/cloudflared}" service install "${cf_token}" >> "${INSTALL_LOG}" 2>&1; then
         # Fallback manual systemd service if cloudflared service install fails
         cat > /etc/systemd/system/cloudflared.service << EOF
 [Unit]
@@ -202,7 +230,7 @@ After=network.target
 [Service]
 TimeoutStartSec=0
 Type=notify
-ExecStart=/usr/local/bin/cloudflared --no-autoupdate tunnel run --token ${cf_token}
+ExecStart=${CLOUDFLARED_BIN:-/usr/bin/cloudflared} --no-autoupdate tunnel run --token ${cf_token}
 Restart=on-failure
 RestartSec=5s
 
@@ -216,6 +244,7 @@ EOF
     systemctl restart cloudflared >> "${INSTALL_LOG}" 2>&1
 
     PANEL_HOST="${perm_domain}"
+    ACCESS_MODE="tunnel_permanent"
     PANEL_PROTOCOL="https"
     PANEL_PORT=443
     PANEL_URL="https://${perm_domain}"

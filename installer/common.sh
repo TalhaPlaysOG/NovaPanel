@@ -26,16 +26,24 @@ WHITE="\033[38;5;255m"
 # Detect Execution Environment (CodeSandbox vs Production VPS)
 detect_environment() {
     IS_CODESANDBOX=0
+    IS_WSL=0
     HAS_SYSTEMD=0
     HAS_ROOT=0
+    SYSTEMD_PID1=""
 
     # CodeSandbox / Cloud VM heuristics
     if [[ -n "${CODESANDBOX_HOST:-}" || -n "${CODESANDBOX_SSE:-}" || -n "${CSB:-}" || -n "${SANDBOX_ID:-}" || -f "/etc/sandbox" ]]; then
         IS_CODESANDBOX=1
     fi
 
+    # WSL heuristics (systemd is opt-in on WSL)
+    if [[ -n "${WSL_DISTRO_NAME:-}" || -f "/proc/sys/fs/binfmt_misc/WSLInterop" ]]; then
+        IS_WSL=1
+    fi
+
     # Systemd init check
-    if [[ -d "/run/systemd/system" ]] && [[ "$(ps -p 1 -o comm= 2>/dev/null)" =~ (systemd|init) ]]; then
+    SYSTEMD_PID1="$(ps -p 1 -o comm= 2>/dev/null | tr -d '[:space:]')"
+    if [[ -d "/run/systemd/system" ]] && [[ "${SYSTEMD_PID1}" =~ ^(systemd|init)$ ]]; then
         HAS_SYSTEMD=1
     fi
 
@@ -44,9 +52,12 @@ detect_environment() {
         HAS_ROOT=1
     fi
 
-    # Determine default mode if not explicitly set via --dev or --prod
+    # Determine default mode if not explicitly set via --dev or --prod.
+    # Root is checked separately by each action (with a "use sudo" hint), so a
+    # normal VPS started without sudo is still recognized as production instead
+    # of silently falling back to panel-only development mode.
     if [[ -z "${DEPLOY_MODE:-}" ]]; then
-        if [[ $IS_CODESANDBOX -eq 1 || $HAS_SYSTEMD -eq 0 || $HAS_ROOT -eq 0 ]]; then
+        if [[ $IS_CODESANDBOX -eq 1 || $HAS_SYSTEMD -eq 0 ]]; then
             DEPLOY_MODE="development"
         else
             DEPLOY_MODE="production"
@@ -156,6 +167,116 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+# Read a value from a dotenv-style file without executing it.
+# Usage: read_env_value /path/to/.env APP_KEY
+read_env_value() {
+    local file="$1"
+    local key="$2"
+    local value=""
+
+    [[ -f "${file}" ]] || return 1
+
+    value=$(grep -m1 -E "^${key}=" "${file}" 2>/dev/null | cut -d '=' -f2- | tr -d '\r')
+    value="${value%\"}"
+    value="${value#\"}"
+    value="${value%\'}"
+    value="${value#\'}"
+
+    printf '%s' "${value}"
+}
+
+# Install Composer and make it reachable even from minimal root shells.
+# Uses /usr/local/bin for root and ~/.local/bin for unprivileged environments.
+# Returns 1 when Composer could not be installed.
+ensure_composer() {
+    local install_dir=""
+    local target=""
+    local php_bin=""
+    local installer=""
+    local sudo_cmd=""
+
+    # Some VPS images start root with a PATH that omits /usr/local/bin, and
+    # sandbox images omit ~/.local/bin.
+    case ":${PATH}:" in
+        *:/usr/local/bin:*) ;;
+        *) export PATH="/usr/local/bin:${PATH}" ;;
+    esac
+    case ":${PATH}:" in
+        *:"${HOME}/.local/bin":*) ;;
+        *) export PATH="${HOME}/.local/bin:${PATH}" ;;
+    esac
+    case ":${PATH}:" in
+        *:/usr/sbin:*) ;;
+        *) export PATH="${PATH}:/usr/sbin:/sbin" ;;
+    esac
+    hash -r 2>/dev/null || true
+
+    export COMPOSER_ALLOW_SUPERUSER=1
+    export COMPOSER_MEMORY_LIMIT=-1
+
+    if command_exists composer && composer --version >/dev/null 2>&1; then
+        return 0
+    fi
+
+    if [[ $EUID -eq 0 ]]; then
+        install_dir="/usr/local/bin"
+    else
+        install_dir="${HOME}/.local/bin"
+    fi
+    target="${install_dir}/composer"
+    mkdir -p "${install_dir}" 2>/dev/null || true
+
+    # A previous attempt may have installed Composer outside PATH.
+    if [[ -x "${target}" ]] && "${target}" --version >/dev/null 2>&1; then
+        print_info "Using existing Composer at ${target}."
+        return 0
+    fi
+
+    php_bin="$(command -v php || command -v php8.2 || true)"
+    if [[ -z "${php_bin}" ]]; then
+        print_warning "PHP CLI is not available, so Composer cannot be installed."
+        return 1
+    fi
+
+    print_info "Downloading and installing Composer 2..."
+    installer="$(mktemp /tmp/nova-composer-setup.XXXXXX 2>/dev/null || echo /tmp/nova-composer-setup.php)"
+    if curl -fsSL --connect-timeout 15 -m 120 https://getcomposer.org/installer -o "${installer}" \
+        && "${php_bin}" "${installer}" --install-dir="${install_dir}" --filename=composer >> "${INSTALL_LOG:-/dev/null}" 2>&1 \
+        && chmod 755 "${target}" 2>/dev/null \
+        && "${target}" --version >/dev/null 2>&1; then
+        rm -f "${installer}"
+        hash -r 2>/dev/null || true
+        print_success "Composer installed: $("${target}" --version 2>/dev/null | head -n 1)"
+        return 0
+    fi
+    rm -f "${installer}"
+
+    print_warning "The Composer installer failed; downloading composer.phar directly..."
+    if curl -fsSL --connect-timeout 15 -m 120 https://getcomposer.org/download/latest-stable/composer.phar -o "${target}" \
+        && chmod 755 "${target}" \
+        && "${target}" --version >/dev/null 2>&1; then
+        hash -r 2>/dev/null || true
+        print_success "Composer installed from composer.phar."
+        return 0
+    fi
+
+    if command_exists apt-get; then
+        print_warning "Trying the distribution Composer package..."
+        if [[ $EUID -ne 0 ]] && command_exists sudo; then
+            sudo_cmd="sudo"
+        fi
+        ${sudo_cmd} apt-get install -y composer >> "${INSTALL_LOG:-/dev/null}" 2>&1 || true
+        hash -r 2>/dev/null || true
+        if command_exists composer && composer --version >/dev/null 2>&1; then
+            print_success "Composer installed from APT."
+            return 0
+        fi
+    fi
+
+    print_warning "Composer could not be installed automatically."
+    return 1
+}
+
 get_public_ip() {
     local ip=""
     ip=$(curl -s --connect-timeout 4 https://api.ipify.org 2>/dev/null)
@@ -250,10 +371,10 @@ prompt_confirm() {
 
 generate_random_password() {
     local length="${1:-32}"
-    LC_ALL=C tr -dc 'A-Za-z0-9!@#$%^&*()_+=' </dev/urandom | head -c "$length"
+    LC_ALL=C tr -dc 'A-Za-z0-9!@#$%^&*()_+=' </dev/urandom 2>/dev/null | head -c "$length" || true
 }
 
 generate_random_token() {
     local length="${1:-32}"
-    LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c "$length"
+    LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom 2>/dev/null | head -c "$length" || true
 }

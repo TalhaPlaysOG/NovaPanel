@@ -21,6 +21,7 @@ configure_ip_access() {
         fi
 
         USE_SSL=0
+        ACCESS_MODE="ip_dev"
         mkdir -p "${NOVA_CONFIG_DIR}"
         cat > "${NOVA_CONFIG_DIR}/access.env" << EOF
 ACCESS_MODE=ip_dev
@@ -46,6 +47,7 @@ EOF
     echo -e "      For public production deployments, a Custom Domain with HTTPS is strongly recommended.\n"
 
     PANEL_HOST=$(prompt_input "Enter public IP or hostname for the panel" "${detected_ip}")
+    ACCESS_MODE="ip"
     PANEL_PROTOCOL="http"
     PANEL_PORT=80
     PANEL_URL="http://${PANEL_HOST}"

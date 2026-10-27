@@ -119,6 +119,9 @@ check_system_prerequisites() {
         if [[ ${#conflicting_ports[@]} -gt 0 ]]; then
             print_warning "Ports in active use: ${conflicting_ports[*]}"
             print_info "If Nginx or Wings is already installed, this is expected."
+            if command_exists ss; then
+                ss -tlpn 2>/dev/null | grep -E ':(80|443|8080|2022) ' | sed 's/^/    /' || true
+            fi
         else
             print_success "Production ports are available."
         fi

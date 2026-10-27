@@ -55,6 +55,11 @@ The menu opens with numbered buttons:
 
 After installation the same menu is available as `sudo nova menu`. See [`docs/MENU.md`](docs/MENU.md) for details.
 
+> Options 1–4 install system packages and services, so they need an Ubuntu/Debian
+> host booted with **systemd** (the default on a VPS). Containers and WSL without
+> systemd are detected as development mode; the menu explains what is missing and
+> still allows a panel-only install.
+
 ### Option B: Automated Install (No Menu)
 Skip the menu and run the linear installer with auto-detected settings:
 

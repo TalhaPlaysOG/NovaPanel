@@ -62,9 +62,32 @@ fi
 # 6. Install PHP Dependencies & Run Migrations
 print_info "Updating composer dependencies..."
 export COMPOSER_ALLOW_SUPERUSER=1
-composer install --no-dev --optimize-autoloader --no-interaction >> "${INSTALL_LOG}" 2>&1 || {
-    print_error "Composer update reported issues. Check install log."
-}
+export COMPOSER_MEMORY_LIMIT=-1
+
+if ! command_exists composer && ! [[ -x /usr/local/bin/composer ]]; then
+    ensure_composer || true
+fi
+
+COMPOSER_BIN=""
+if command_exists composer; then
+    COMPOSER_BIN="$(command -v composer)"
+elif [[ -x /usr/local/bin/composer ]]; then
+    COMPOSER_BIN="/usr/local/bin/composer"
+fi
+
+if [[ -n "${COMPOSER_BIN}" ]]; then
+    if ! ( cd "${PANEL_DIR}" && "${COMPOSER_BIN}" install --no-dev --optimize-autoloader --no-interaction ) >> "${INSTALL_LOG}" 2>&1; then
+        print_warning "Composer reported issues. Retrying with platform requirements ignored..."
+        ( cd "${PANEL_DIR}" && "${COMPOSER_BIN}" install --no-dev --optimize-autoloader --no-interaction --ignore-platform-reqs ) >> "${INSTALL_LOG}" 2>&1 || true
+    fi
+else
+    print_warning "Composer is not available; keeping the existing vendor directory."
+fi
+
+if [[ ! -f "${PANEL_DIR}/vendor/autoload.php" ]]; then
+    php artisan up >> "${INSTALL_LOG}" 2>&1 || true
+    print_fatal "Update left the panel without vendor/autoload.php. Restore the pre-update backup."
+fi
 
 print_info "Applying database migrations..."
 php artisan migrate --force >> "${INSTALL_LOG}" 2>&1 || {

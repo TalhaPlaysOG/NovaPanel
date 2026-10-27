@@ -17,8 +17,8 @@ install_wings_binary() {
     fi
 
     # In Production VPS Mode:
-    mkdir -p /etc/pterodactyl /var/log/pterodactyl /var/lib/pterodactyl/volumes /var/lib/pterodactyl/backups
-    chmod 755 /var/lib/pterodactyl/volumes
+    mkdir -p /etc/pterodactyl /var/log/pterodactyl /var/lib/pterodactyl/volumes /var/lib/pterodactyl/backups /var/run/wings
+    chmod 755 /var/lib/pterodactyl/volumes /var/run/wings
 
     local arch
     arch=$(get_cpu_arch)
@@ -42,6 +42,7 @@ PartOf=docker.service
 [Service]
 User=root
 WorkingDirectory=/etc/pterodactyl
+RuntimeDirectory=wings
 LimitNOFILE=4096
 PIDFile=/var/run/wings/daemon.pid
 ExecStart=/usr/local/bin/wings

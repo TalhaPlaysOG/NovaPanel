@@ -36,10 +36,20 @@ register_local_node() {
 
     print_info "Configured Node Resources: Memory=${safe_mem_mb} MB, Disk=${safe_disk_mb} MB"
 
-    # 2. Determine node FQDN and scheme
+    # 2. Determine node FQDN and scheme. The panel may be exposed through a
+    # Cloudflare tunnel, but Wings must be reachable directly by the panel.
+    # Registering the tunnel hostname here would make every server action fail
+    # because Cloudflare does not proxy Wings on port 8080.
     local node_fqdn="${PANEL_HOST:-127.0.0.1}"
     local node_scheme="http"
-    if [[ "${USE_SSL:-0}" -eq 1 && "${ACCESS_MODE}" == "domain" ]]; then
+    if [[ "${ACCESS_MODE:-}" =~ ^tunnel ]]; then
+        local node_public_ip
+        node_public_ip=$(get_public_ip)
+        if [[ -n "${node_public_ip}" ]]; then
+            node_fqdn="${node_public_ip}"
+        fi
+        node_scheme="http"
+    elif [[ "${USE_SSL:-0}" -eq 1 && "${ACCESS_MODE:-}" == "domain" ]]; then
         node_scheme="https"
     else
         node_scheme="http"
@@ -106,15 +116,12 @@ register_local_node() {
 
     # 6. Seed Default Minecraft Network Allocations (Ports 25565 - 25575)
     print_info "Provisioning default game port allocations (25565 - 25575)..."
-    local node_alloc_ip="${PANEL_HOST}"
+    local node_alloc_ip="${node_fqdn}"
     if [[ "$node_alloc_ip" =~ ^https?:// ]]; then
         node_alloc_ip=$(echo "$node_alloc_ip" | sed -e 's|^https\?://||' -e 's|:[0-9]*$||')
     fi
-    if [[ "${ACCESS_MODE}" =~ ^tunnel ]]; then
-        node_alloc_ip=$(get_public_ip)
-        if [[ -z "$node_alloc_ip" ]]; then
-            node_alloc_ip="0.0.0.0"
-        fi
+    if [[ -z "$node_alloc_ip" ]]; then
+        node_alloc_ip="0.0.0.0"
     fi
 
     php -r "

@@ -58,6 +58,24 @@ sudo bash installer/nova-menu.sh --node
 
 ---
 
+## Environment detection
+
+The menu decides between **production** and **development** mode automatically:
+
+| Detected host | Mode | What works |
+| :--- | :--- | :--- |
+| Ubuntu/Debian VPS with systemd | `production` | All options |
+| VPS started without `sudo` | `production` | All options; install actions ask you to re-run with `sudo` |
+| CodeSandbox, Docker container, chroot, WSL without systemd | `development` | Panel-only install (SQLite), user management, status |
+
+Development mode is intentionally limited: Wings, `cloudflared` and Auto Node need
+systemd, kernel cgroups and root, so they cannot run inside a container or a
+sandbox. The menu shows a short reason above the buttons when this applies. To
+get the full feature set, run the menu as root on an Ubuntu/Debian VPS, or enable
+systemd in WSL (`[boot] systemd=true` in `/etc/wsl.conf`, then `wsl --shutdown`).
+
+---
+
 ## Button reference
 
 ```
@@ -85,7 +103,8 @@ Installs Docker Engine (official repository) and the Wings daemon, creates the
 menu offers to jump straight into Auto Node.
 
 Wings requires a production Linux host with root access, systemd and cgroups.
-The option is hidden behind a warning in development / CodeSandbox mode.
+In development / CodeSandbox / container mode the menu explains which
+requirement is missing and returns to the button list.
 
 ### [3] Setup Tunnel
 
@@ -187,7 +206,8 @@ payload travels. Running the panel over HTTPS remains strongly recommended.
 
 | Symptom | Fix |
 | :--- | :--- |
-| `This action requires a production Linux host` | Run as root on Ubuntu/Debian with systemd, not in CodeSandbox |
+| `This action needs a production Linux VPS` | Check the reason printed above the menu: containers, sandboxes and WSL without systemd cannot run Wings or cloudflared. Use an Ubuntu/Debian VPS with systemd, or enable systemd in WSL. |
+| `This action requires root privileges` | Re-run the menu with `sudo bash installer/nova-menu.sh` (or `sudo nova menu`). |
 | `cloudflared` install fails | Check `/var/log/nova-panel/install.log`; ensure DNS and outbound 443 work |
 | Tunnel service inactive | `journalctl -u cloudflared -n 50` |
 | Wings service inactive | `journalctl -u wings -n 50`; confirm Docker is running |

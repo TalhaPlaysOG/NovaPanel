@@ -34,6 +34,11 @@ bash <(curl -fsSL https://raw.githubusercontent.com/TalhaPlaysOG/NovaPanel/main/
 This opens the interactive setup menu. Choose `[1] Install Panel` to start the
 automated installation, or use any other option (Wings, tunnel, node, user).
 
+> Full-system options (Wings, tunnel, Auto Node) need an Ubuntu/Debian host
+> booted with **systemd** and root access. Containers and WSL without systemd
+> are detected as development mode; options 2–4 explain what is missing instead
+> of failing silently.
+
 To skip the menu entirely and run the automated installer directly, append
 `--auto`:
 

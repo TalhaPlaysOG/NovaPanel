@@ -171,9 +171,8 @@ fi
 # Sync custom images from img/ directory to public web assets
 if [[ -d "${SCRIPT_DIR}/../img" ]]; then
     print_info "Syncing custom branding images from img/ directory..."
-    mkdir -p "${PANEL_DIR}/public/assets/svgs" "${PANEL_DIR}/public/assets/img"
+    mkdir -p "${PANEL_DIR}/public/assets/img"
     cp -a "${SCRIPT_DIR}/../img/." "${PANEL_DIR}/public/assets/img/" 2>/dev/null || true
-    cp -a "${SCRIPT_DIR}/../img/"*.svg "${PANEL_DIR}/public/assets/svgs/" 2>/dev/null || true
     if [[ -f "${SCRIPT_DIR}/../img/favicon.ico" ]]; then
         cp -f "${SCRIPT_DIR}/../img/favicon.ico" "${PANEL_DIR}/public/favicons/favicon.ico" 2>/dev/null || true
     fi
@@ -202,12 +201,24 @@ chmod -R 777 "${PANEL_DIR}/storage" "${PANEL_DIR}/bootstrap/cache" 2>/dev/null |
 # Generate .env
 print_info "Generating application configuration (.env)..."
 
+# Preserve secrets across reinstalls. Replacing APP_KEY would make existing
+# encrypted node daemon tokens unreadable; replacing HASHIDS_SALT would break
+# existing external IDs used by the API.
+APP_KEY_VALUE="$(read_env_value "${PANEL_DIR}/.env" APP_KEY || true)"
+HASHIDS_SALT_VALUE="$(read_env_value "${PANEL_DIR}/.env" HASHIDS_SALT || true)"
+if [[ -z "${APP_KEY_VALUE}" ]]; then
+    APP_KEY_VALUE="base64:$(openssl rand -base64 32)"
+fi
+if [[ -z "${HASHIDS_SALT_VALUE}" ]]; then
+    HASHIDS_SALT_VALUE="$(generate_random_token 20)"
+fi
+
 if [[ "${DEPLOY_MODE}" == "development" ]]; then
     cat > "${PANEL_DIR}/.env" << EOF
 APP_NAME="Nova Panel"
 APP_ENV=local
 APP_DEBUG=true
-APP_KEY=base64:$(openssl rand -base64 32)
+APP_KEY=${APP_KEY_VALUE}
 APP_THEME=pterodactyl
 APP_TIMEZONE=UTC
 APP_URL=${PANEL_URL}
@@ -231,7 +242,7 @@ CACHE_DRIVER=file
 QUEUE_CONNECTION=sync
 SESSION_DRIVER=file
 
-HASHIDS_SALT=$(generate_random_token 20)
+HASHIDS_SALT=${HASHIDS_SALT_VALUE}
 HASHIDS_LENGTH=8
 
 MAIL_MAILER=log
@@ -247,7 +258,7 @@ else
 APP_NAME="Nova Panel"
 APP_ENV=production
 APP_DEBUG=false
-APP_KEY=base64:$(openssl rand -base64 32)
+APP_KEY=${APP_KEY_VALUE}
 APP_THEME=pterodactyl
 APP_TIMEZONE=UTC
 APP_URL=${PANEL_URL}
@@ -275,7 +286,7 @@ CACHE_DRIVER=redis
 QUEUE_CONNECTION=redis
 SESSION_DRIVER=redis
 
-HASHIDS_SALT=$(generate_random_token 20)
+HASHIDS_SALT=${HASHIDS_SALT_VALUE}
 HASHIDS_LENGTH=8
 
 MAIL_MAILER=smtp
@@ -298,6 +309,7 @@ fi
 # Install Composer Dependencies
 print_info "Installing PHP application dependencies..."
 export COMPOSER_ALLOW_SUPERUSER=1
+export COMPOSER_MEMORY_LIMIT=-1
 
 # Ensure cache directories exist before composer hooks
 mkdir -p "${PANEL_DIR}/storage/framework/views" \
@@ -307,26 +319,48 @@ mkdir -p "${PANEL_DIR}/storage/framework/views" \
          "${PANEL_DIR}/bootstrap/cache"
 chmod -R 777 "${PANEL_DIR}/storage" "${PANEL_DIR}/bootstrap/cache" 2>/dev/null || true
 
-# Attempt Composer installation
-if [[ ! -f "${PANEL_DIR}/vendor/autoload.php" ]]; then
-    composer install --no-dev --optimize-autoloader --no-interaction >> "${INSTALL_LOG}" 2>&1 || {
-        print_warning "Standard composer install reported issues. Retrying with platform bypass..."
-        composer install --no-dev --optimize-autoloader --no-interaction --ignore-platform-req=php >> "${INSTALL_LOG}" 2>&1 || true
-    }
+COMPOSER_BIN=""
+if command_exists composer && composer --version >/dev/null 2>&1; then
+    COMPOSER_BIN="$(command -v composer)"
+elif [[ -x /usr/local/bin/composer ]] && /usr/local/bin/composer --version >/dev/null 2>&1; then
+    COMPOSER_BIN="/usr/local/bin/composer"
+else
+    print_warning "Composer is not reachable. Installing it now..."
+    if ensure_composer; then
+        COMPOSER_BIN="$(command -v composer 2>/dev/null || true)"
+        if [[ -z "${COMPOSER_BIN}" && -x /usr/local/bin/composer ]]; then
+            COMPOSER_BIN="/usr/local/bin/composer"
+        fi
+    fi
 fi
 
-# Resilient fallback: If vendor/autoload.php is still missing, extract official pre-built vendor package
+if [[ -z "${COMPOSER_BIN}" ]]; then
+    print_fatal "Composer is required to install PHP dependencies, but it is not available. See ${INSTALL_LOG}"
+fi
+
+run_composer_install() {
+    ( cd "${PANEL_DIR}" && "${COMPOSER_BIN}" install --no-dev --optimize-autoloader --no-interaction "$@" )
+}
+
+# Attempt Composer installation
 if [[ ! -f "${PANEL_DIR}/vendor/autoload.php" ]]; then
-    print_info "Restoring verified vendor dependencies from release bundle..."
-    curl -fsSLo /tmp/panel-vendor.tar.gz "https://github.com/pterodactyl/panel/releases/download/v1.15.2/panel.tar.gz" >> "${INSTALL_LOG}" 2>&1 || true
-    if [[ -f /tmp/panel-vendor.tar.gz ]]; then
-        tar -xzf /tmp/panel-vendor.tar.gz -C "${PANEL_DIR}" vendor 2>/dev/null || true
-        rm -f /tmp/panel-vendor.tar.gz
+    if ! run_composer_install >> "${INSTALL_LOG}" 2>&1; then
+        if [[ -f "${PANEL_DIR}/vendor/autoload.php" ]]; then
+            print_warning "Composer reported a post-install script issue, but vendor/autoload.php is present. Continuing."
+        else
+            print_warning "Standard composer install reported issues. Recent log lines:"
+            tail -n 20 "${INSTALL_LOG}" 2>/dev/null | sed 's/^/    /' || true
+            print_info "Retrying with platform requirements ignored..."
+            run_composer_install --ignore-platform-reqs >> "${INSTALL_LOG}" 2>&1 || true
+        fi
     fi
 fi
 
 if [[ ! -f "${PANEL_DIR}/vendor/autoload.php" ]]; then
-    print_fatal "Could not install or locate PHP vendor dependencies (vendor/autoload.php missing)."
+    print_warning "Composer did not create vendor/autoload.php. Recent log lines:"
+    tail -n 20 "${INSTALL_LOG}" 2>/dev/null | sed 's/^/    /' || true
+    print_info "Run manually: cd ${PANEL_DIR} && ${COMPOSER_BIN} install --no-dev"
+    print_fatal "Could not install PHP vendor dependencies (vendor/autoload.php missing)."
 fi
 print_success "PHP dependencies verified."
 

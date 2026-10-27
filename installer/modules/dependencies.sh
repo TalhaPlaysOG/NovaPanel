@@ -47,20 +47,12 @@ install_system_dependencies() {
         PHP_VER=$(php -r 'echo PHP_MAJOR_VERSION . "." . PHP_MINOR_VERSION;')
         print_success "PHP ${PHP_VER} is available: $(command -v php)"
 
-        # Check Composer
+        # Check Composer through the shared bootstrap so PATH issues are fixed.
         print_info "Checking Composer..."
-        if ! command_exists composer; then
-            print_info "Installing Composer locally..."
-            mkdir -p "${HOME}/.local/bin"
-            curl -sS https://getcomposer.org/installer | php -- --install-dir="${HOME}/.local/bin" --filename=composer >> "${INSTALL_LOG}" 2>&1 || true
-            export PATH="${HOME}/.local/bin:${PATH}"
-        fi
-
-        if command_exists composer; then
-            print_success "Composer is available: $(composer --version 2>/dev/null | head -n1)"
-        else
+        if ! ensure_composer; then
             print_fatal "Composer is required to install PHP dependencies."
         fi
+        print_success "Composer is available: $(composer --version 2>/dev/null | head -n1)"
 
         # Check SQLite or MySQL
         print_info "Checking database driver support..."
@@ -136,13 +128,17 @@ install_system_dependencies() {
 
     print_success "PHP ${PHP_VERSION} installed successfully."
 
-    # Install Composer
-    print_info "Checking Composer installation..."
-    if ! command_exists composer; then
-        print_info "Downloading and installing Composer 2..."
-        curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer >> "${INSTALL_LOG}" 2>&1 || print_fatal "Failed to install Composer."
+    # Prefer the PHP version we just installed when several versions exist.
+    if command_exists update-alternatives && [[ -x "/usr/bin/php${PHP_VERSION}" ]]; then
+        update-alternatives --set php "/usr/bin/php${PHP_VERSION}" >/dev/null 2>&1 || true
     fi
-    print_success "Composer is ready: $(composer --version | head -n 1)"
+
+    # Install Composer (handles minimal PATHs and installer failures)
+    print_info "Checking Composer installation..."
+    if ! ensure_composer; then
+        print_fatal "Failed to install Composer. Install it manually from https://getcomposer.org/download/ and re-run the installer."
+    fi
+    print_success "Composer is ready: $(composer --version 2>/dev/null | head -n 1)"
 
     # Install and configure Redis
     print_info "Installing Redis server..."
